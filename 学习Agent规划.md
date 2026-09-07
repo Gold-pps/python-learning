@@ -100,12 +100,12 @@ Agent 不是普通的“问答模型”，而是能围绕目标主动工作的�
 
 ### 第 3 周：让 Agent 学会使用工具
 
-- [ ] 阅读 DeepSeek 官方 [Tool Calls](https://api-docs.deepseek.com/guides/tool_calls/) 文档
-- [ ] 对照阅读 OpenAI Agents SDK 的 [Using tools](https://developers.openai.com/api/docs/guides/tools)（看框架写法，模型名换成 DeepSeek）
-- [ ] 用 `function_tool` 写第一个自定义工具（计算器、天气查询、文件读取均可）
-- [ ] 观察“模型决定调用工具 → 代码执行 → 结果返回模型”的完整循环
-- [ ] 练习一个“不用工具答不了、用了工具才能答对”的题目
-- [ ] 注意：本章仍走 Chat Completions 兼容路径，避开 OpenAI Responses 专属工具能力
+- [x] 阅读 DeepSeek 官方 [Tool Calls](https://api-docs.deepseek.com/guides/tool_calls/) 文档
+- [x] 对照阅读 OpenAI Agents SDK 的 [Using tools](https://developers.openai.com/api/docs/guides/tools)（看框架写法，模型名换成 DeepSeek）
+- [x] 用 `function_tool` 写第一个自定义工具（计算器、天气查询、文件读取均可）
+- [x] 观察“模型决定调用工具 → 代码执行 → 结果返回模型”的完整循环
+- [x] 练习一个“不用工具答不了、用了工具才能答对”的题目
+- [x] 注意：本章仍走 Chat Completions 兼容路径，避开 OpenAI Responses 专属工具能力
 
 产出：Agent 能通过工具解决单步任务；代码保存为 `02_agent_with_tool.py`。
 

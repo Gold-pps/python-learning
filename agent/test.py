@@ -1,19 +1,4 @@
-tools = [
-    {
-        "type": "function",
-        "function": {
-            "name": "get_weather",
-            "description": "Get weather of a location, the user should supply a location first.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "location": {
-                        "type": "string",
-                        "description": "The city and state, e.g. San Francisco, CA",
-                    }
-                },
-                "required": ["location"]
-            },
-        }
-    },
-]
+from pathlib import Path
+csv_path = Path(__file__).resolve().parent.parent/"students.csv"
+lines = csv_path.read_text(encoding="utf-8").strip().splitlines()
+print(len(lines))
