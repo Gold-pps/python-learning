@@ -94,7 +94,7 @@ Agent 不是普通的“问答模型”，而是能围绕目标主动工作的�
 
   asyncio.run(main())
   ```
-- [ ] 弄懂 `AsyncOpenAI(base_url=...)`、`set_default_openai_api("chat_completions")`、`Agent`、`Runner.run`、`final_output`
+- [x] 弄懂 `AsyncOpenAI(base_url=...)`、`set_default_openai_api("chat_completions")`、`Agent`、`Runner.run`、`final_output`
 
 产出：请求真正发往 DeepSeek 且能跑通一个 Agent；代码保存为 `01_hello_agent.py`。
 

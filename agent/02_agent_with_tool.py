@@ -58,7 +58,7 @@ def get_beijing_time() -> str:
     now = datetime.datetime.now(beijing_tz)
     text = now.strftime("%Y-%m-%d %H:%M:%S")
     # 这行会直接打印在终端里，方便你确认工具真的被调用了
-    print(f"[工具被调用] get_beijing_time() -> {text}")
+    print(f"[工具被调用]")
     return text
 
 
@@ -74,8 +74,8 @@ agent = Agent(
 
 
 async def main():
-    result = await Runner.run(agent, "北京时间往前5小时是几点？请直接告诉我。")
-    print("最终回答：", result.final_output)
+    result = await Runner.run(agent, "1123152454*23524762542=?")
+    print(result.final_output)
 
 
 if __name__ == "__main__":
