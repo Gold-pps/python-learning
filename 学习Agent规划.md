@@ -120,10 +120,10 @@ Agent 不是普通的“问答模型”，而是能围绕目标主动工作的�
 
 ### 第 5 周：多 Agent 编排与交接
 
-- [ ] 阅读官方 [Orchestration and handoffs](https://developers.openai.com/api/docs/guides/agents/orchestration)
-- [ ] 创建一个“总控 Agent + 两个专长 Agent”（例如历史老师 + 数学老师）
-- [ ] 让总控 Agent 根据问题类型自动交接给合适的专长 Agent
-- [ ] 了解 Agent as tool 与 handoffs 的适用区别
+- [x] 阅读官方 [Orchestration and handoffs](https://developers.openai.com/api/docs/guides/agents/orchestration)
+- [x] 创建一个“总控 Agent + 两个专长 Agent”（例如历史老师 + 数学老师）
+- [x] 让总控 Agent 根据问题类型自动交接给合适的专长 Agent
+- [x] 了解 Agent as tool 与 handoffs 的适用区别
 
 产出：能自动分流的作业问答 Demo。
 
