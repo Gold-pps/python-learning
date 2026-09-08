@@ -111,10 +111,10 @@ Agent 不是普通的“问答模型”，而是能围绕目标主动工作的�
 
 ### 第 4 周：理解运行循环与状态
 
-- [ ] 阅读官方 [Running agents](https://developers.openai.com/api/docs/guides/agents/running-agents)
-- [ ] 掌握多轮对话如何保留上下文（history / session / continuation）
-- [ ] 不使用 OpenAI 专属的服务端 continuation，改为手动传 `history` 或用 SDK 本地 session
-- [ ] 做一个小练习：连续提问 3 次，Agent 能记住之前的信息
+- [x] 阅读官方 [Running agents](https://developers.openai.com/api/docs/guides/agents/running-agents)
+- [x] 掌握多轮对话如何保留上下文（history / session / continuation）
+- [x] 不使用 OpenAI 专属的服务端 continuation，改为手动传 `history` 或用 SDK 本地 session
+- [x] 做一个小练习：连续提问 3 次，Agent 能记住之前的信息
 
 产出：理解会话状态，做出多轮对话 Demo。
 
