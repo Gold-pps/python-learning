@@ -1,6 +1,9 @@
 ﻿__pycache__/
 *.pyc
 *.pyo
+.venv/
+.env
 agent/.env
+agent学习/.env
 debug.log
 .vscode/

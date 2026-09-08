@@ -1,0 +1,16 @@
+# python学习 依赖清单
+# 生成日期：2026-09-08
+# 覆盖范围：根目录基础练习（CS50 风格） + agent/ 学习项目
+# Python 版本：3.10+（Miniconda 已于 2026-09-08 卸载，如要继续运行请改用
+# 独立 Python 或新建 venv 后执行 pip install -r requirements.txt）
+
+# 基础练习/工具类
+cowsay==6.1
+pyttsx3==2.99
+requests==2.33.1
+pytest==9.1.1
+
+# agent 学习项目（DeepSeek 后端）
+python-dotenv==1.2.1
+openai==3.8.0
+openai-agents==0.22.0

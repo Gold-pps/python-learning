@@ -56,7 +56,7 @@ history_agent = Agent(
         "你是一位耐心的历史老师。用简洁准确的中文回答问题；"
         "如果问题与历史无关，就告诉用户这更适合其他学科。"
     ),
-    model="deepseek-v4-flash",
+    model="deepseek-v4.1-flash-expires-on-0910",
 )
 
 math_agent = Agent(
