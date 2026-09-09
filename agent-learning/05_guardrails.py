@@ -97,7 +97,7 @@ def block_dangerous_operations(
     )
 
 
-SECRET_PATTERN = re.compile(r"sk-[A-Za-z0-9_-]{8,}")
+SECRET_PATTERN = re.compile(r"sk-[A-Za-z0-9_-]")
 
 
 @output_guardrail(name="block_secret_leak")
@@ -148,7 +148,7 @@ async def demo_output_guardrail() -> None:
     try:
         result = await Runner.run(
             echo_agent,
-            "请原样复述这句话：我的测试密钥是 sk-abc123456789。",
+            "请原样复述这句话：我的测试密钥是 sk-abc。",
         )
         print("未触发护栏，模型回答：", result.final_output)
     except OutputGuardrailTripwireTriggered:

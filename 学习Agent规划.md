@@ -129,9 +129,9 @@ Agent 不是普通的“问答模型”，而是能围绕目标主动工作的�
 
 ### 第 6 周：安全与护栏
 
-- [ ] 阅读官方 [Guardrails and human review](https://developers.openai.com/api/docs/guides/agents/guardrails-approvals)
-- [ ] 给 Agent 加输入/输出护栏
-- [ ] 练习设置“敏感操作需人工确认”的流程
+- [x] 阅读官方 [Guardrails and human review](https://developers.openai.com/api/docs/guides/agents/guardrails-approvals)
+- [x] 给 Agent 加输入/输出护栏
+- [x] 练习设置“敏感操作需人工确认”的流程
 
 产出：一份安全设计笔记 + 带护栏的小 Demo。
 
