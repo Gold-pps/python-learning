@@ -52,8 +52,8 @@ set_tracing_disabled(disabled=True)
 
 @function_tool
 def count_students_rows() -> str:
-    """统计项目根目录 students.csv 的数据行数（不含表头）。"""
-    csv_path = Path(__file__).resolve().parent.parent / "students.csv"
+    """统计 python-base 目录下 students.csv 的数据行数（不含表头）。"""
+    csv_path = Path(__file__).resolve().parent.parent / "python-base" / "students.csv"
     lines = csv_path.read_text(encoding="utf-8").strip().splitlines()
     print("[调用count_students_rows]")
     return str(max(0, len(lines) - 1))
@@ -70,9 +70,9 @@ def get_beijing_time() -> str:
 
 @function_tool
 def find_student_home(name: str) -> str:
-    """在 students.csv 中查找指定学生的家乡，找不到就返回提示。"""
+    """在 python-base 目录的 students.csv 中查找指定学生的家乡，找不到就返回提示。"""
     print(f"[工具被调用] find_student_home(name={name})")
-    csv_path = Path(__file__).resolve().parent.parent / "students.csv"
+    csv_path = Path(__file__).resolve().parent.parent / "python-base" / "students.csv"
     for line in csv_path.read_text(encoding="utf-8").strip().splitlines()[1:]:
         student, home = line.split(",")
         if student == name:
