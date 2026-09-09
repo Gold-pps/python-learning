@@ -22,12 +22,14 @@ def run_script(filename: str) -> str:
         [sys.executable, str(AGENT_DIR / filename)],
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         cwd=str(AGENT_DIR),
         timeout=180,
     )
     if proc.returncode != 0:
-        return proc.stdout + proc.stderr
-    return proc.stdout
+        return (proc.stdout or "") + (proc.stderr or "")
+    return proc.stdout or ""
 
 
 def check_output(output: str, expected: list[str]) -> list[str]:
