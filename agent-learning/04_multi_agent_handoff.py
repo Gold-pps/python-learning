@@ -56,7 +56,7 @@ history_agent = Agent(
         "你是一位耐心的历史老师。用简洁准确的中文回答问题；"
         "如果问题与历史无关，就告诉用户这更适合其他学科。"
     ),
-    model="deepseek-v4.1-flash-expires-on-0910",
+    model="deepseek-v4-flash",
 )
 
 math_agent = Agent(
@@ -75,10 +75,10 @@ triage_agent = Agent(
     handoff_description="作业问答的总入口",
     instructions=(
         "你是作业问答系统的总控。判断用户问题属于哪个学科"
-        "然后把对话交接给对应专长的老师：历史人文类问题交给擅长历史的老师，"
+        "你不被允许回答问题。"
+        "只能把对话交接给对应专长的老师：历史人文类问题交给擅长历史的老师，"
         "数学计算类问题交给擅长数学的老师。简单寒暄可以自己直接回应；"
         "拿不准时请用户补充说明，不要自己硬答专业问题。"
-        "如果没有合适的老师就告诉用户暂时无法回答。"
     ),
     model="deepseek-v4-flash",
     handoffs=[history_agent, math_agent],
