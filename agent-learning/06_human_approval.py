@@ -64,7 +64,7 @@ agent = Agent(
         "你是文件管理助手。用户明确要求删除文件时，"
         "你必须调用 delete_file 工具，不要自己假装完成。"
     ),
-    model="deepseek-v4-flash",
+    model="deepseek-flash",
     tools=[delete_file],
 )
 

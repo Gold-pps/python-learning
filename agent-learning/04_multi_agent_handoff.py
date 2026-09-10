@@ -56,7 +56,7 @@ history_agent = Agent(
         "你是一位耐心的历史老师。用简洁准确的中文回答问题；"
         "如果问题与历史无关，就告诉用户这更适合其他学科。"
     ),
-    model="deepseek-v4-flash",
+    model="deepseek-flash",
 )
 
 math_agent = Agent(
@@ -66,7 +66,7 @@ math_agent = Agent(
         "你是一位耐心的数学老师。先解释思路，再给出答案；"
         "如果问题与数学无关，就告诉用户这更适合其他学科。"
     ),
-    model="deepseek-v4-flash",
+    model="deepseek-flash",
 )
 
 # 总控 Agent：本身不答题，只做学科分流
@@ -80,7 +80,7 @@ triage_agent = Agent(
         "数学计算类问题交给擅长数学的老师。简单寒暄可以自己直接回应；"
         "拿不准时请用户补充说明，不要自己硬答专业问题。"
     ),
-    model="deepseek-v4-flash",
+    model="deepseek-flash",
     handoffs=[history_agent, math_agent],
 )
 

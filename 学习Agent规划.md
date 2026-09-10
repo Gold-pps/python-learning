@@ -51,7 +51,7 @@ Agent 不是普通的“问答模型”，而是能围绕目标主动工作的�
 - [ ] 建立自己的学习目录：`python学习/agent/`
 
 产出：理解“Agent = 模型 + 指令 + 工具 + 循环”；本机已配置好 DeepSeek Key。
-费用建议：学习阶段默认用 `deepseek-v4-flash`，复杂任务再换 `deepseek-v4-pro`；先小额充值，用完看账单再充。
+费用建议：学习阶段默认用 `deepseek-flash`，复杂任务再换 `deepseek-v4-pro`；先小额充值，用完看账单再充。
 
 ### 第 2 周：跑通第一个 Agent
 
@@ -85,7 +85,7 @@ Agent 不是普通的“问答模型”，而是能围绕目标主动工作的�
   agent = Agent(
       name="History tutor",
       instructions="You answer history questions clearly and concisely.",
-      model="deepseek-v4-flash",
+      model="deepseek-flash",
   )
 
   async def main():
@@ -177,7 +177,7 @@ Agent 不是普通的“问答模型”，而是能围绕目标主动工作的�
 - 每周至少留下一个可运行的产出；
 - 卡住时先查官方文档，再问 AI，最后再搜博客；
 - 所有代码统一放在 `python学习/agent/`，笔记用 Markdown 记录；
-- 默认模型只用 `deepseek-v4-flash`；某一步质量确实不够时再临时换成 `deepseek-v4-pro`；
+- 默认模型只用 `deepseek-flash`；某一步质量确实不够时再临时换成 `deepseek-v4-pro`；
 - 每周看一次 DeepSeek 平台账单，把花费记在笔记里；
 - 每完成一周，回来看这份文件打勾，并写下 3 句话复盘。
 
@@ -204,7 +204,7 @@ Agent 不是普通的“问答模型”，而是能围绕目标主动工作的�
 
 ### 说明
 
-上面 OpenAI 概念文档里的示例都写着 `gpt-*` 模型名，阅读时把它们换成 DeepSeek 的 `deepseek-v4-flash` 或 `deepseek-v4-pro`，并且必须先做第 2 周的客户端配置，请求才会发往 DeepSeek。
+上面 OpenAI 概念文档里的示例都写着 `gpt-*` 模型名，阅读时把它们换成 DeepSeek 的 `deepseek-flash` 或 `deepseek-v4-pro`，并且必须先做第 2 周的客户端配置，请求才会发往 DeepSeek。
 
 ### 其他
 
