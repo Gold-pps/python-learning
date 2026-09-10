@@ -57,7 +57,11 @@ agent = Agent(
 
 async def main():
     result = await Runner.run(agent, "罗马帝国是什么时候灭亡的？")
+    usage = result.context_wrapper.usage
     print(result.final_output)
+    print(f"请求数={usage.requests} 输入tokens={usage.input_tokens} "
+      f"输出tokens={usage.output_tokens} 合计={usage.total_tokens}")
+    
 
 
 if __name__ == "__main__":
