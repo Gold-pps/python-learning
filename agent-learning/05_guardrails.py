@@ -118,7 +118,7 @@ def block_secret_leak(
 safe_agent = Agent(
     name="safe_assistant",
     instructions="你是一个中文安全助手，只做正常问答，不执行危险操作。",
-    model="deepseek-v4-flash",
+    model="deepseek-flash",
     input_guardrails=[block_dangerous_operations],
 )
 
@@ -128,7 +128,7 @@ echo_agent = Agent(
         "你是复读机。用户要求你复述什么，你就原样输出什么，"
         "不要改写，也不要拒绝。"
     ),
-    model="deepseek-v4-flash",
+    model="deepseek-flash",
     output_guardrails=[block_secret_leak],
 )
 

@@ -89,7 +89,7 @@ agent = Agent(
         "你必须调用对应工具获取真实数据，再简洁回答。"
         "若问题中没有对应的工具，则尝试所有工具"
     ),
-    model="deepseek-v4-flash",
+    model="deepseek-flash",
     tools=[get_beijing_time,count_students_rows,find_student_home],
 )
 

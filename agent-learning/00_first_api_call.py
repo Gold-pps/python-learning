@@ -33,7 +33,7 @@ client = OpenAI(
 )
 
 response = client.chat.completions.create(
-    model="deepseek-v4-flash",
+    model="deepseek-flash",
     messages=[
         {"role": "system", "content": "你是一个耐心的老师。"},
         {"role": "user", "content": "用一句话解释什么是 Agent。"},

@@ -970,7 +970,7 @@ hue-6-2: #e6c07b
 <li class="task-list-item enabled"><input class="task-list-item-checkbox"type="checkbox"> 建立自己的学习目录：<code>python学习/agent/</code></li>
 </ul>
 <p>产出：理解“Agent = 模型 + 指令 + 工具 + 循环”；本机已配置好 DeepSeek Key。
-费用建议：学习阶段默认用 <code>deepseek-v4-flash</code>，复杂任务再换 <code>deepseek-v4-pro</code>；先小额充值，用完看账单再充。</p>
+费用建议：学习阶段默认用 <code>deepseek-flash</code>，复杂任务再换 <code>deepseek-v4-pro</code>；先小额充值，用完看账单再充。</p>
 <h3 id="第-2-周跑通第一个-agent">第 2 周：跑通第一个 Agent</h3>
 <ul class="contains-task-list">
 <li class="task-list-item enabled"><input class="task-list-item-checkbox" checked=""type="checkbox"> 先用 DeepSeek 官方文档的示例完成一次最普通的聊天调用（OpenAI SDK + <code>base_url=&quot;https://api.deepseek.com&quot;</code>）</li>
@@ -1001,7 +1001,7 @@ set_tracing_disabled(disabled=<span class="hljs-literal">True</span>)
 agent = Agent(
     name=<span class="hljs-string">&quot;History tutor&quot;</span>,
     instructions=<span class="hljs-string">&quot;You answer history questions clearly and concisely.&quot;</span>,
-    model=<span class="hljs-string">&quot;deepseek-v4-flash&quot;</span>,
+    model=<span class="hljs-string">&quot;deepseek-flash&quot;</span>,
 )
 
 <span class="hljs-keyword">async</span> <span class="hljs-keyword">def</span> <span class="hljs-title function_">main</span>():
@@ -1088,7 +1088,7 @@ asyncio.run(main())
 <li>每周至少留下一个可运行的产出；</li>
 <li>卡住时先查官方文档，再问 AI，最后再搜博客；</li>
 <li>所有代码统一放在 <code>python学习/agent/</code>，笔记用 Markdown 记录；</li>
-<li>默认模型只用 <code>deepseek-v4-flash</code>；某一步质量确实不够时再临时换成 <code>deepseek-v4-pro</code>；</li>
+<li>默认模型只用 <code>deepseek-flash</code>；某一步质量确实不够时再临时换成 <code>deepseek-v4-pro</code>；</li>
 <li>每周看一次 DeepSeek 平台账单，把花费记在笔记里；</li>
 <li>每完成一周，回来看这份文件打勾，并写下 3 句话复盘。</li>
 </ul>
@@ -1113,7 +1113,7 @@ asyncio.run(main())
 <li><a href="https://developers.openai.com/api/docs/guides/agent-evals">Evaluate agent workflows</a></li>
 </ul>
 <h3 id="说明">说明</h3>
-<p>上面 OpenAI 概念文档里的示例都写着 <code>gpt-*</code> 模型名，阅读时把它们换成 DeepSeek 的 <code>deepseek-v4-flash</code> 或 <code>deepseek-v4-pro</code>，并且必须先做第 2 周的客户端配置，请求才会发往 DeepSeek。</p>
+<p>上面 OpenAI 概念文档里的示例都写着 <code>gpt-*</code> 模型名，阅读时把它们换成 DeepSeek 的 <code>deepseek-flash</code> 或 <code>deepseek-v4-pro</code>，并且必须先做第 2 周的客户端配置，请求才会发往 DeepSeek。</p>
 <h3 id="其他">其他</h3>
 <ul>
 <li><a href="https://learn.chatgpt.com/docs/customization/overview">Customization（Codex 使用与调教）</a></li>

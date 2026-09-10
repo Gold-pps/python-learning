@@ -51,7 +51,7 @@ set_tracing_disabled(disabled=True)
 agent = Agent(
     name="History tutor",
     instructions="You answer history questions clearly and concisely.",
-    model="deepseek-v4-flash",
+    model="deepseek-flash",
 )
 
 
