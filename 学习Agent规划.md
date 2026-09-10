@@ -140,7 +140,7 @@ Agent 不是普通的“问答模型”，而是能围绕目标主动工作的�
 - [x] 由于没有 OpenAI Key，保持代码里的 `set_tracing_disabled(disabled=True)`，不在 OpenAI 平台开追踪
 - [x] 需要调试时在本地打印关键日志：模型回复、工具调用参数、工具返回结果、交接目标
 - [x] 熟悉 DeepSeek 平台的用量/账单页面，学会每次实验后查看花费
-- [ ] 阅读官方 [Evaluate agent workflows](https://developers.openai.com/api/docs/guides/agent-evals) 理解评估思路，但评估脚本在本地自己写
+- [x] 阅读官方 [Evaluate agent workflows](https://developers.openai.com/api/docs/guides/agent-evals) 理解评估思路，但评估脚本在本地自己写
 - [x] 为前几周的 Agent 写 2～3 条评估用例
 
 产出：能用本地日志定位问题、通过账单控制成本，并用评估用例衡量改进。
