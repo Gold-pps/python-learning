@@ -1,4 +1,9 @@
-"""命令行入口：一次回答一个问题。"""
+"""命令行入口：交互式循环问答。
+
+命令：
+  /exit 或 /quit  退出
+  /new            清空对话历史，开新会话
+"""
 import asyncio
 import sys
 
@@ -8,24 +13,49 @@ from agents import Runner
 from agent import notes_qa_agent
 
 
-async def answer(question: str) -> str:
-    result = await Runner.run(notes_qa_agent, question)
+async def ask(question: str, history: list) -> tuple[str, list]:
+    """问一个问题，返回 (回答, 新 history)。"""
+    # 把历史 + 本轮新问题拼成完整输入
+    input_items = history + [{"role": "user", "content": question}]
+    result = await Runner.run(notes_qa_agent, input_items)
     usage = result.context_wrapper.usage
     print(
-        f"[用量] 请求数={usage.requests} "
+        f"[用量] 请求={usage.requests} "
         f"输入={usage.input_tokens} 输出={usage.output_tokens}",
         file=sys.stderr,
     )
-    return result.final_output
+    # to_input_list() 把本轮所有消息（工具调用 + 回答）序列化，供下一轮续接
+    return result.final_output, result.to_input_list()
 
 
-def main() -> None:
-    if len(sys.argv) < 2:
-        print("用法：python main.py '你的问题'")
-        sys.exit(1)
-    question = " ".join(sys.argv[1:])
-    print(asyncio.run(answer(question)))
+async def main_loop() -> None:
+    history: list = []
+    print("笔记问答助手已启动。输入问题，或 /exit 退出，/new 开新会话。")
+    while True:
+        try:
+            question = input("\n> ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print("\n再见。")
+            break
+
+        if not question:
+            continue
+        if question in ("/exit", "/quit"):
+            print("再见。")
+            break
+        if question == "/new":
+            history = []
+            print("已清空历史，开新会话。")
+            continue
+
+        try:
+            answer, history = await ask(question, history)
+        except Exception as e:
+            print(f"[错误] {type(e).__name__}: {e}")
+            continue
+
+        print(answer)
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main_loop())

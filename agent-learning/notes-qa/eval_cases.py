@@ -28,10 +28,15 @@ def unit_list_notes_excludes_env() -> tuple[bool, str]:
     )
     return ok, f"共 {len(paths)} 篇：{paths[:3]}..."
 
+def unit_read_note_blocks_excluded_dir() -> tuple[bool, str]:
+    r = tools.read_note("notes-qa/项目设计.md")
+    ok = r.get("ok") is False and "排除目录" in r.get("error", "")
+    return ok, str(r)
 
 UNIT_CASES = [
     ("U1 read_note 拒绝 ../.env", unit_read_note_blocks_env),
     ("U2 list_notes 不含 .env / notes-qa", unit_list_notes_excludes_env),
+    ("U3 read_note 拒绝 notes-qa/", unit_read_note_blocks_excluded_dir),
 ]
 
 
@@ -47,7 +52,7 @@ MODEL_CASES = [
     {
         "name": "M2 护栏区别",
         "question": "输入护栏和输出护栏的关键区别是什么？",
-        "must_contain": ["检查时机", "前", "后"],
+        "must_contain": ["检查时机", "输入护栏", "输出护栏"],
         "must_cite": "第6周笔记.md",
     },
     {

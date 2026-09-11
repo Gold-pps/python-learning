@@ -37,6 +37,10 @@ def _safe_resolve(rel_path: str) -> Path:
         raise ValueError("路径越界")
     if target.suffix != ".md":
         raise ValueError("只允许读取 .md 文件")
+        # 排除目录检查（与 list_notes 保持一致）
+    rel_parts = target.relative_to(root).parts
+    if any(part in EXCLUDE_DIRS or _is_hidden(part) for part in rel_parts):
+        raise ValueError("该路径在排除目录内，不可读取")
     return target
 
 
@@ -94,6 +98,7 @@ def read_note(file: str, start_line: int = 1, end_line: int = 120) -> dict:
     }
 
 MAX_SEARCH_RESULTS = 5
+MAX_PER_FILE = 2
 MAX_KEYWORD_LEN = 50
 SNIPPET_LEN = 100
 
@@ -121,19 +126,28 @@ def search_notes(keyword: str, max_results: int = MAX_SEARCH_RESULTS) -> dict:
             continue
         try:
             lines = p.read_text(encoding="utf-8").splitlines()
-        except Exception as e:
+        except Exception:
             continue
+
+        file_hits = 0
         for i, line in enumerate(lines, start=1):
-            if needle in line.casefold():
-                snippet = line.strip()
-                if len(snippet) > SNIPPET_LEN:
-                    snippet = snippet[:SNIPPET_LEN] + "..."
-                matches.append({
-                    "file": str(p.relative_to(root)),
-                    "line": i,
-                    "snippet": snippet,
-                })
-                if len(matches) >= max_results:
-                    return {"ok": True, "matches": matches}
+            if needle not in line.casefold():
+                continue
+            snippet = line.strip()
+            if len(snippet) > SNIPPET_LEN:
+                snippet = snippet[:SNIPPET_LEN] + "..."
+            matches.append({
+                "file": str(p.relative_to(root)),
+                "line": i,
+                "snippet": snippet,
+            })
+            file_hits += 1
+            if file_hits >= MAX_PER_FILE:
+                break
+            if len(matches) >= max_results:
+                break
+
+        if len(matches) >= max_results:
+            break
 
     return {"ok": True, "matches": matches}
