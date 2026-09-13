@@ -7,3 +7,5 @@ agent/.env
 agent学习/.env
 debug.log
 .vscode/
+.mypy_cache/
+.pytest_cache/
