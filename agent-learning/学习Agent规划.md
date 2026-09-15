@@ -3,6 +3,9 @@
 > 制定日期：2026-09-05
 > 学习目标：从零学会“使用 Agent”和“开发 Agent”，最终独立完成一个能调工具、多步工作的 Agent 小项目。
 > 模型后端：**DeepSeek API**。OpenAI 系 SDK 只是本地开发框架，所有请求都发往 `https://api.deepseek.com`，全程不需要 OpenAI 充值。
+> 完成状态：**12 周全部完成**（2026-09-13 收尾）。本文档的勾选已于 2026-09-15 按实际情况回填，与 `学习进度.md` 一致。
+> 运行环境：Python **3.14.4**（代码要求 ≥3.12：`asyncio.timeout` 需 3.11+，`Path.is_junction` 需 3.12+）。
+> 实际目录：Agent 学习目录为 `agent-learning/`，基础练习目录为 `python-base/`（不是下文最初设想的 `python学习/agent/`）。
 
 ## 一、先建立正确认知
 
@@ -42,16 +45,16 @@ Agent 不是普通的“问答模型”，而是能围绕目标主动工作的�
 
 ### 第 1 周：概念与环境准备
 
-- [ ] 阅读 DeepSeek 官方 [首次调用 API](https://api-docs.deepseek.com/quick_start/your_first_api_call/) 和 [模型与价格](https://api-docs.deepseek.com/quick_start/pricing/)
-- [ ] 了解 OpenAI Agents SDK 只是开发框架：改 `base_url` 后请求会发往 DeepSeek，不调用 OpenAI 服务（官方说明见 [Models and providers](https://openai.github.io/openai-agents-python/models/#ways-to-integrate-non-openai-providers)）
-- [ ] 用 Codex 完成 3 个多步任务，记录它的工作过程
-- [ ] 安装 Python 3.10+、pip、Git
-- [ ] 到 [DeepSeek 开放平台](https://platform.deepseek.com) 注册账号 → 实名认证 → 用支付宝/微信小额充值 → 创建 API Key
-- [ ] 把 Key 放进本地环境变量 `DEEPSEEK_API_KEY`（不要写进代码、不要提交到 Git）
-- [ ] 建立自己的学习目录：`python学习/agent/`
+- [x] 阅读 DeepSeek 官方 [首次调用 API](https://api-docs.deepseek.com/quick_start/your_first_api_call/) 和 [模型与价格](https://api-docs.deepseek.com/quick_start/pricing/)
+- [x] 了解 OpenAI Agents SDK 只是开发框架：改 `base_url` 后请求会发往 DeepSeek，不调用 OpenAI 服务（官方说明见 [Models and providers](https://openai.github.io/openai-agents-python/models/#ways-to-integrate-non-openai-providers)）
+- [x] 用 Codex 完成多步任务并留下过程记录（实际记录见 `第11周笔记.md`：AGENTS.md、Skill、filesystem MCP、Subagents 尝试与代码审查）
+- [x] 安装 Python（当时计划 3.10+，实际使用 3.14.4；代码最低要求为 3.12）、pip、Git
+- [x] 到 [DeepSeek 开放平台](https://platform.deepseek.com) 注册账号 → 实名认证 → 用支付宝/微信小额充值 → 创建 API Key
+- [x] 把 Key 放进本地环境变量 `DEEPSEEK_API_KEY`（实际存放在 `agent-learning/.env`，已加入 `.gitignore`，未提交）
+- [x] 建立自己的学习目录（实际为 `python-learning/agent-learning/`，同时在 `python-base/` 放基础练习）
 
 产出：理解“Agent = 模型 + 指令 + 工具 + 循环”；本机已配置好 DeepSeek Key。
-费用建议：学习阶段默认用 `deepseek-flash`，复杂任务再换 `deepseek-v4-pro`；先小额充值，用完看账单再充。
+费用建议：学习阶段默认用 `deepseek-flash`，复杂任务再换 `deepseek-v4-pro`（**2026-09-14 起该模型名已被官方路由到 V4.1 Flash 并按 Flash 计费**，详见 `第7周笔记.md`）；先小额充值，用完看账单再充。实测 2026-09-01 ～ 09-10 账单为 20.7878 元。
 
 ### 第 2 周：跑通第一个 Agent
 
@@ -153,35 +156,40 @@ Agent 不是普通的“问答模型”，而是能围绕目标主动工作的�
 
 里程碑安排：
 
-- [ ] 第 8 周：确定项目范围，画出功能结构
-- [ ] 第 9 周：跑通最小可用版本（只做最核心的一件事）
-- [ ] 第 10 周：加工具、状态、错误处理并做演示
+- [x] 第 8 周：确定项目范围，画出功能结构 → 产出 `notes-qa/项目设计.md`
+- [x] 第 9 周：跑通最小可用版本（只做最核心的一件事）→ 三个只读工具 + 命令行问答，评估 5/5 通过
+- [x] 第 10 周：加工具、状态、错误处理并做演示 → 交互式循环、`check_input`、安全修复，评估 8/8 通过
 
 ### 第 11 周：产品线进阶（A 线深化）
 
-- [ ] 阅读官方 [Customization 文档](https://learn.chatgpt.com/docs/customization/overview)
-- [ ] 为当前项目写一份 `AGENTS.md`
-- [ ] 做一个自己的 Skill
-- [ ] 尝试接入一个 MCP 工具
-- [ ] 练习用 Subagents 分派任务
+- [x] 阅读官方 [Customization 文档](https://learn.chatgpt.com/docs/customization/overview)（以动手实践为主，未单独留阅读笔记）
+- [x] 为当前项目写一份 `AGENTS.md`（仓库根，已验证每次会话自动加载）
+- [x] 做一个自己的 Skill（`.codex/skills/notes-qa-eval/`）
+- [x] 尝试接入一个 MCP 工具（filesystem MCP，已能调用并锁定到仓库根）
+- [x] 练习用 Subagents 分派任务（子代理能启动并执行，但 Codex v0.154.0 下任务载荷未传递成功，详见 `第11周笔记.md`）
 
 ### 第 12 周：复盘与展示
 
-- [ ] 整理学习笔记与项目代码
-- [ ] 准备一次 10 分钟的组会汇报或演示
-- [ ] 写下“下一步想做的方向”
+- [x] 整理学习笔记与项目代码（写 `笔记索引.md`、补 `README.md`，删除 5 个残留文件）
+- [x] 准备一次 10 分钟的组会汇报或演示（产出 `第12周演示稿.md`）
+- [x] 写下“下一步想做的方向”（见 `第12周笔记.md` 第 5 节）
 
 ## 四、每周执行建议
 
 - 每天投入 30～60 分钟，优先保证“动手跑通”，不要只看文档；
 - 每周至少留下一个可运行的产出；
 - 卡住时先查官方文档，再问 AI，最后再搜博客；
-- 所有代码统一放在 `python学习/agent/`，笔记用 Markdown 记录；
-- 默认模型只用 `deepseek-flash`；某一步质量确实不够时再临时换成 `deepseek-v4-pro`；
-- 每周看一次 DeepSeek 平台账单，把花费记在笔记里；
-- 每完成一周，回来看这份文件打勾，并写下 3 句话复盘。
+- 所有代码统一放在 `python-learning/agent-learning/`，笔记用 Markdown 记录（基础练习另放 `python-base/`）；
+- 默认模型只用 `deepseek-flash`；某一步质量确实不够时再临时换成 `deepseek-v4-pro`
+  （注意：据 2026-09-14 官方公告，`deepseek-v4-pro` 的请求已被路由到 V4.1 Flash 并按 Flash 计费，见 `第7周笔记.md` 第 5 节）；
+- 每周看一次 DeepSeek 平台账单，把花费记在笔记里（实际记录见 `第7周笔记.md` 与各周笔记的"成本记录"一节）；
+- 每完成一周，回来看这份文件打勾，并写下 3 句话复盘（实际执行：复盘统一写在每周笔记的"我的复盘"一节）。
+
+执行结果说明（2026-09-15 补记）：前 7 条基本按计划执行；唯一明显折扣的是"每周看账单"——只有第 7 周留了精确到分的账单表，第 11、12 周只记了 token 数，总花费记为"约几十元"。
 
 ## 五、官方参考
+
+> 时效提示：价格、模型名与文档链接都会变动。本文档与各周笔记反映 **2026-09** 的状态，引用前请以官方页面为准。
 
 ### DeepSeek 官方（实际使用的模型服务）
 
@@ -204,15 +212,26 @@ Agent 不是普通的“问答模型”，而是能围绕目标主动工作的�
 
 ### 说明
 
-上面 OpenAI 概念文档里的示例都写着 `gpt-*` 模型名，阅读时把它们换成 DeepSeek 的 `deepseek-flash` 或 `deepseek-v4-pro`，并且必须先做第 2 周的客户端配置，请求才会发往 DeepSeek。
+上面 OpenAI 概念文档里的示例都写着 `gpt-*` 模型名，阅读时把它们换成 DeepSeek 的 `deepseek-flash`（或 `deepseek-v4-pro`，该模型名自 2026-09-14 起按 Flash 计费），并且必须先做第 2 周的客户端配置，请求才会发往 DeepSeek。
 
 ### 其他
 
 - [Customization（Codex 使用与调教）](https://learn.chatgpt.com/docs/customization/overview)
 
-## 六、我的背景与期望（待填写）
+## 六、我的背景与期望（2026-09-15 按仓库记录回填）
 
-- 现有编程基础：
-- 每周可投入时间：
-- 最想做的 Agent 应用场景：
-- 三个月后的目标：
+> 以下 4 项原先一直留空，现按仓库现有事实回填；如与你的真实情况不符，直接改这 4 行即可。
+
+- **现有编程基础**：有 CS50 风格的 Python 基础练习（`python-base/`，36 个文件：34 个 `.py` + 2 个数据文件，含 pytest 练习）；学习 Agent 之前没有 LLM / Agent 开发经验。
+- **每周可投入时间**：计划为每天 30～60 分钟；实际 12 周在 2026-09-05 ～ 09-13 内完成，节奏集中在 9 月上旬。
+- **最想做的 Agent 应用场景**：结合数控 / 智能制造方向的资料检索与要点总结（对应第 8～10 周候选项目第 2 项，见 `第12周笔记.md` 第 5 节）。
+- **三个月后的目标**：做出一个能给他人使用的 Agent 工具，并搞懂 RAG 全链路（切分 → embedding → 检索 → 重排）。
+
+### 完成情况自评（2026-09-15）
+
+| 期望 | 结果 |
+| --- | --- |
+| 12 周完成一个能用的 Agent 小项目 | 达成：`notes-qa` 可交互问答，评估 15/15 |
+| 每周一个可运行产出 | 部分达成：第 2~7、9~10 周（共 8 周）有可运行脚本 / 程序；第 1、8、11、12 周的产出是配置、设计文档、AGENTS.md / Skill 与整理文档，非可运行代码 |
+| 独立完成"能调工具、多步工作"的 Agent | 达成，且额外做了护栏、人工审批、成本与评估 |
+| 三个月后做出能给他人用的工具 | 未达成，属下一阶段目标 |

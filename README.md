@@ -1,6 +1,6 @@
 # python-learning
 
-个人 Python 学习仓库，主攻 **Agent 开发**。从零起步，12 周完成从 API 调用到可用的 Agent 小项目。
+个人 Python 学习仓库，主攻 **Agent 开发**。从零起步，12 周完成从 API 调用到可用的 Agent 小项目（2026-09-13 收尾）。
 
 ## 亮点
 
@@ -8,7 +8,8 @@
 - **开发框架**：OpenAI Agents SDK（仅作为本地开发框架）；
 - **完成项目**：`agent-learning/notes-qa/` —— 个人资料问答助手，能通过三个工具
   检索本地 Markdown 笔记、基于原文回答并附来源引用；
-- **评估**：本地评估脚本，**单元测试 12 条 + 模型评估 3 条，全部通过**。
+- **评估**：本地评估脚本，**单元测试 12 条 + 模型评估 3 条 = 15 条，全部通过**
+  （2026-09-15 复跑单元测试仍为 12/12）。
 
 ## 目录结构
 
@@ -16,30 +17,43 @@
 python-learning/
 ├── AGENTS.md                     写给 AI 助手的仓库规则
 ├── README.md                     本文件
+├── requirements.txt              依赖清单（备选，版本以 .venv 实际为准）
+├── .codex/skills/                Codex 自定义 skill
+│   └── notes-qa-eval/SKILL.md    跑 notes-qa 评估
 ├── agent-learning/               Agent 学习主目录
-│   ├── 00~07_*.py                第 1~7 周练习脚本
+│   ├── 00~07_*.py                第 1~7 周练习脚本（9 个）
 │   ├── 学习Agent规划.md           12 周学习计划
 │   ├── 学习进度.md                当前进度（恢复上下文先读它）
-│   ├── 第4~11周笔记.md            每周学习笔记
+│   ├── 笔记索引.md                每周主题 / 笔记 / 产出对照
+│   ├── 学习评审报告.md             仓库与文档评审（含待办清单）
+│   ├── 第1~12周笔记.md            每周学习笔记（12 篇）
+│   ├── 第12周演示稿.md            10 分钟组会汇报底稿
 │   └── notes-qa/                 第 8~11 周项目
 │       ├── 项目设计.md
 │       ├── config.py             DeepSeek + SDK 配置
 │       ├── tools.py              list_notes / search_notes / read_note
 │       ├── agent.py              Agent 定义
 │       ├── main.py               交互式命令行入口
-│       └── eval_cases.py         本地评估（12 + 3 条）
-├── python-base/                  基础 Python 练习
-└── .codex/skills/                Codex 自定义 skill
+│       ├── eval_cases.py         本地评估（12 + 3 = 15 条）
+│       └── smoke_test.py         环境自检（可删）
+├── python-base/                  基础 Python 练习（CS50 风格）
+└── .venv/                        Python 虚拟环境（不提交）
 ```
+
+> 仓库根另有 4 个 `.pptx`（毕业答辩 / 组会汇报）与 1 张截图，与学习内容无关。
 
 ## 快速开始
 
 ### 1. 准备环境
 
+要求 **Python ≥3.12**（本项目实际使用 3.14.4）。
+
 ```bash
 uv venv .venv
 uv pip install --python .venv/bin/python openai-agents python-dotenv
 ```
+
+`requirements.txt` 是备选清单，其钉住的版本与当前 `.venv` 存在小幅差异，以实际环境为准。
 
 ### 2. 配置 API Key
 
@@ -70,7 +84,7 @@ python eval_cases.py --unit-only
 
 1. 用 `search_notes` 搜索关键词；
 2. 必要时用 `read_note` 读取上下文；
-3. 用中文回答并附来源引用 `[文件名:行号]`；
+3. 用中文回答并附来源引用 `[文件名:起始行-结束行]`；
 4. 找不到依据时明确回答"笔记中没有找到"，不编造。
 
 ### 安全设计
@@ -101,14 +115,15 @@ python eval_cases.py --unit-only
 | 8    | 项目启动：确定范围与设计            |
 | 9    | 项目 MVP：三个工具 + 评估           |
 | 10   | 项目收尾：交互升级 + 安全修复       |
-| 11   | 产品线进阶：AGENTS.md / Skill / MCP |
+| 11   | 产品线进阶：AGENTS.md / Skill / MCP / Subagents（载荷传递未成功） |
 | 12   | 复盘与展示                          |
 
-详细计划见 `agent-learning/学习Agent规划.md`。
+详细计划见 `agent-learning/学习Agent规划.md`，每周笔记与产出对照见 `agent-learning/笔记索引.md`，
+当前进度见 `agent-learning/学习进度.md`。
 
 ## 技术栈
 
-- Python 3.10+
+- Python ≥3.12（实际 3.14.4）
 - [OpenAI Agents SDK](https://openai.github.io/openai-agents-python/)
 - [DeepSeek API](https://api-docs.deepseek.com/)
 - [Codex CLI](https://developers.openai.com/codex/)
