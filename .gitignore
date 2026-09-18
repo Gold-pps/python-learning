@@ -3,9 +3,10 @@
 *.pyo
 .venv/
 .env
-agent/.env
-agent学习/.env
 debug.log
 .vscode/
 .mypy_cache/
 .pytest_cache/
+# 实验中间产物（第 13 周 token 曲线实验的原始数据，可随时重跑生成）
+agent-learning/notes-qa/after.json
+agent-learning/notes-qa/before.json

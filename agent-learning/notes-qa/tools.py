@@ -137,6 +137,7 @@ def search_notes(keyword: str, max_results: int = MAX_SEARCH_RESULTS) -> dict:
     needle = keyword.casefold()
     root = config.NOTES_ROOT.resolve()
     matches = []
+    skipped_large = 0
 
     for p in sorted(root.rglob("*.md")):
         # 与 list_notes 一致：链接指向根目录外时跳过，避免搜索泄露外部文件
@@ -149,6 +150,16 @@ def search_notes(keyword: str, max_results: int = MAX_SEARCH_RESULTS) -> dict:
         if any(part in EXCLUDE_DIRS or _is_hidden(part) for part in rel_parts[:-1]):
             continue
         if _is_hidden(p.name):
+            continue
+        # 大小检查必须在 read_text 之前：否则"检查"本身就已经把大文件读进内存了。
+        # read_note 遇到大文件报错（用户要的是那一个文件），搜索则跳过并计数
+        # （一个坏文件不该让整次搜索失败），计数会回传给模型，避免它把
+        # "没搜到"误当成"笔记里没有"。
+        try:
+            if p.stat().st_size > MAX_FILE_BYTES:
+                skipped_large += 1
+                continue
+        except OSError:
             continue
         try:
             lines = p.read_text(encoding="utf-8").splitlines()
@@ -176,4 +187,4 @@ def search_notes(keyword: str, max_results: int = MAX_SEARCH_RESULTS) -> dict:
         if len(matches) >= max_results:
             break
 
-    return {"ok": True, "matches": matches}
+    return {"ok": True, "matches": matches, "skipped_large_files": skipped_large}

@@ -11,6 +11,7 @@ from pathlib import Path
 
 import config  # noqa: F401
 from agents import Runner
+from agents.exceptions import MaxTurnsExceeded
 
 import tools
 from agent import notes_qa_agent
@@ -127,10 +128,15 @@ def unit_list_notes_skips_link_escape() -> tuple[bool, str]:
             f"读取被拒：{read_via_link.get('error')}"
         )
     finally:
-        # 链接必须先删。注意 is_junction()：断掉的 junction 不算 symlink，
-        # 单靠 is_symlink() 会漏删，留下一个谁也读不到的链接目录。
+        # 链接必须先删，且两种链接要用两种删法：
+        # - 符号链接：os.unlink（对链接调用 os.rmdir 会抛 NotADirectoryError，
+        #   链接留在原地，下次运行 U6 会因为"临时路径已存在"直接失败）；
+        # - junction（Windows）：os.rmdir。is_junction() 在 Linux 上恒为 False，
+        #   两个分支互不干扰；断掉的 junction 不算 symlink，少一个分支就会漏删。
         try:
-            if link.is_symlink() or link.is_junction():
+            if link.is_symlink():
+                os.unlink(link)
+            elif link.is_junction():
                 os.rmdir(link)
             elif cleanup_cmd:
                 subprocess.run(cleanup_cmd, check=False, capture_output=True)
@@ -244,29 +250,100 @@ UNIT_CASES = [
 
 # ---------- 模型评估（走完整 Agent） ----------
 
+# 四类标注（有答案 / 无答案 / 跨文档 / 需要多跳）与第 19 周的检索评测集共用一套分类，
+# 不是另起一套。每条用例的"答案确实在资料里"都事先 grep 核实过——
+# 一道本身无解的题会被误读成"模型能力差"，这是评测集最贵的错误。
+#
+# 断言口径（比原来的"单个关键词 + 单个文件子串"严格）：
+#   must_contain        全部关键词都要出现
+#   must_contain_any    至少出现其一（用于"拒答"这类措辞不唯一的场景）
+#   must_match_any      至少匹配其中一条正则（措辞完全无法穷举时用，如"没有找到/没有讲/未提及"）
+#   must_cite_files     这些文件的引用必须都出现
+#   must_cite_any_of    至少引用其中某一个（同一事实可能散在几篇笔记里）
+#   min_distinct_files  引用到的不同文件数下限（跨文档/多跳类的主要判据）
 MODEL_CASES = [
     {
-        "name": "M1 第 7 周主题",
-        "question": "第 7 周讲了什么？",
+        "name": "A1 第 7 周做了哪几件事",
+        "category": "有答案",
+        "question": "第 7 周这一周主要做了哪几件事？",
         "must_contain": ["日志", "评估", "账单"],
-        "must_cite": "第7周笔记.md",
+        # 第 7 周的事在 `第7周笔记.md`、`学习进度.md`、`学习Agent规划.md` 里都有记载，
+        # 指定唯一出处会制造假失败（实测：同一问题两次运行引用了不同的文件）。
+        "must_cite_any_of": ["第7周笔记.md", "学习进度.md", "学习Agent规划.md"],
     },
     {
-        "name": "M2 护栏区别",
-        "question": "输入护栏和输出护栏的关键区别是什么？",
-        "must_contain": ["检查时机", "输入护栏", "输出护栏"],
-        "must_cite": "第6周笔记.md",
+        "name": "A2 两个护栏的运行时机",
+        "category": "有答案",
+        "question": "输入护栏和输出护栏分别在什么时机运行？",
+        "must_contain": ["输入护栏", "输出护栏"],
+        "must_cite_files": ["第6周笔记.md"],
     },
     {
-        "name": "M3 无答案不编造",
-        "question": "笔记里有没有讲 Excel 怎么画图？",
-        "must_contain": ["没有找到"],
-        "must_cite": None,
+        "name": "A3 路径安全的做法",
+        "category": "有答案",
+        "question": "第 9 周是怎么防止读取笔记目录之外文件的？",
+        "must_contain": ["越界"],
+        "must_cite_files": ["第9周笔记.md"],
+    },
+    {
+        "name": "A4 账单金额（数字型答案）",
+        "category": "有答案",
+        "question": "2026-09-01 到 09-10 的 DeepSeek 账单是多少？",
+        "must_contain": ["20.7878"],
+        "must_cite_any_of": ["第7周笔记.md", "学习进度.md", "第12周演示稿.md", "学习Agent规划.md"],
+    },
+    {
+        "name": "B1 无答案：容器编排部署（资料里 0 命中）",
+        "category": "无答案",
+        "question": "笔记里有讲用 Rust 做系统级并发编程吗？",
+        "must_match_any": [r"没有(找到|讲|提及|涉及|相关|收录|介绍)|未(找到|提及|涉及)|无相关"],
+        # 只给 tests/test_eval_cases.py 的"泄漏检查"用：这个词一旦出现在资料库里，
+        # 这道题就失效了（模型可以直接抄资料库里的"已核实 0 命中"，而不必真的拒答）
+        "negative_keywords": ["Rust"],
+    },
+    {
+        "name": "B2 无答案：桌面界面框架（资料里 0 命中）",
+        "category": "无答案",
+        "question": "笔记里有没有讲怎么用 Kotlin 写移动端界面？",
+        "must_match_any": [r"没有(找到|讲|提及|涉及|相关|收录|介绍)|未(找到|提及|涉及)|无相关"],
+        "negative_keywords": ["Kotlin"],
+    },
+    {
+        "name": "C1 跨文档：哪些周做了安全工作",
+        "category": "跨文档",
+        "question": "第一阶段 12 周里，哪些周做了和安全相关的工作？",
+        "must_contain_any": ["安全", "护栏", "越界", "拒绝"],
+        "min_distinct_files": 2,
+    },
+    {
+        "name": "C2 跨文档：notes-qa 从第 9 周到第 12 周的变化",
+        "category": "跨文档",
+        "question": "notes-qa 这个项目从第 9 周到第 12 周分别有什么变化？",
+        "must_contain_any": ["第9周", "第10周"],
+        "min_distinct_files": 3,
+    },
+    {
+        "name": "D1 多跳：演示稿里的漏洞追到出处",
+        "category": "需要多跳",
+        "question": "第 12 周演示稿里提到的那个安全漏洞，最初是在哪一周、通过什么方式发现的？",
+        "must_contain_any": ["junction", "逃逸"],
+        "must_cite_files": ["第11周笔记.md"],
+    },
+    {
+        "name": "D2 多跳：规划里的要求追到落地记录",
+        "category": "需要多跳",
+        "question": "第二阶段规划要求把 Codex 的明文 Key 改成环境变量注入，这件事在第 13 周是怎么落地的？",
+        "must_contain": ["env_key"],
+        "must_cite_files": ["工程化改造记录.md"],
+        "min_distinct_files": 2,
     },
 ]
 
 
 import re
+
+# 引用格式约定为 [文件名:起始行-结束行]；不同文章里可能写成 [文件名:12] 或 [文件名:12-40]
+_CITATION_RE = re.compile(r"\[([^\[\]:]+?\.md)\s*:[^\[\]]*\]")
 
 def _normalize(text: str) -> str:
     """去掉 Markdown 粗体/斜体标记和多余空白，便于关键词匹配。"""
@@ -275,35 +352,108 @@ def _normalize(text: str) -> str:
     return text.casefold()
 
 
+def _norm_name(name: str) -> str:
+    """文件名归一化：回答里可能写成「第 7 周笔记.md」，去掉空白再比。"""
+    return re.sub(r"\s+", "", name)
+
+
+def extract_cited_files(text: str) -> set[str]:
+    """从回答里抽出被引用的文件名（归一化后）。
+
+    这比原来"文件名作为子串出现在回答里"严格得多：原来只要提到文件名就算引用，
+    现在必须真的写出 `[文件名:行号]` 这种可回查的出处。
+    """
+    return {_norm_name(m.group(1)) for m in _CITATION_RE.finditer(text)}
+
+
 def check_model_output(text: str, case: dict) -> list[str]:
     """返回缺失项列表；空列表 = PASS。"""
     missing = []
     normalized = _normalize(text)
-    for word in case["must_contain"]:
+    cited = extract_cited_files(text)
+
+    for word in case.get("must_contain", []):
         if _normalize(word) not in normalized:
             missing.append(f"缺少关键词「{word}」")
-    if case["must_cite"] and _normalize(case["must_cite"]) not in normalized:
-        missing.append(f"缺少引用「{case['must_cite']}」")
+
+    any_words = case.get("must_contain_any")
+    if any_words and not any(_normalize(w) in normalized for w in any_words):
+        missing.append(f"未出现其中任一必需表达：{any_words}")
+
+    patterns = case.get("must_match_any")
+    if patterns and not any(re.search(p, normalized) for p in patterns):
+        missing.append(f"未匹配任一必需表达（正则）：{patterns}")
+
+    required = {_norm_name(f) for f in case.get("must_cite_files", [])}
+    if not required <= cited:
+        missing.append(f"缺少引用：{sorted(required - cited)}")
+
+    any_cites = case.get("must_cite_any_of")
+    if any_cites and not cited & {_norm_name(f) for f in any_cites}:
+        missing.append(f"未引用其中任一文件：{any_cites}")
+
+    min_files = case.get("min_distinct_files")
+    if min_files and len(cited) < min_files:
+        missing.append(f"引用文件数 {len(cited)} < {min_files}：{sorted(cited)}")
+
     return missing
 
 
-async def run_model_cases() -> int:
+MAX_TURNS_PER_CASE = 16
+"""单条用例里 Agent 最多"思考 + 调用工具"多少轮。
+
+SDK 默认 10 轮，实测跨文档类问题会撞上限并抛 `MaxTurnsExceeded`。
+"撞上限"本身是真实信号（检索循环没收敛），但有两个原则：
+① 给足轮数再判定，否则测的是 harness 的限制而不是模型的能力；
+② 单条用例异常**绝不能**让整份评估崩掉——修复前 C1 抛异常直接把后面的用例全丢了。
+"""
+
+
+async def run_model_cases(only: str | None = None) -> tuple[int, int]:
+    """跑模型评估，返回 (通过数, 总数)。"""
     passed = 0
-    for case in MODEL_CASES:
-        print(f"\n--- {case['name']} ---")
+    cases = [c for c in MODEL_CASES if not only or only in c["name"]]
+    by_category: dict[str, list[int]] = {}
+
+    def record(category: str, ok: bool) -> None:
+        stat = by_category.setdefault(category, [0, 0])
+        stat[0] += int(ok)
+        stat[1] += 1
+
+    for case in cases:
+        print(f"\n--- [{case['category']}] {case['name']} ---")
         print(f"Q: {case['question']}")
-        result = await Runner.run(notes_qa_agent, case["question"])
+        try:
+            result = await Runner.run(
+                notes_qa_agent, case["question"], max_turns=MAX_TURNS_PER_CASE
+            )
+        except MaxTurnsExceeded:
+            print(f"FAIL: 超过 {MAX_TURNS_PER_CASE} 轮仍未收敛（检索循环在打转）")
+            record(case["category"], ok=False)
+            continue
+        except Exception as exc:            # noqa: BLE001 —— 单条用例失败不能拖垮整份评估
+            print(f"FAIL: 调用异常 {type(exc).__name__}: {exc}")
+            record(case["category"], ok=False)
+            continue
+
         answer = result.final_output
+        cited = sorted(extract_cited_files(answer))
         missing = check_model_output(answer, case)
+        print(f"引用：{cited or '（无）'}")
         if missing:
             print("FAIL:", "；".join(missing))
-            print("回答节选：", answer[:200].replace("\n", " "))
+            print("回答节选：", answer[:300].replace("\n", " "))
         else:
             print("PASS")
             passed += 1
+        record(case["category"], ok=not missing)
         usage = result.context_wrapper.usage
         print(f"  [用量] 请求={usage.requests} 输入={usage.input_tokens} 输出={usage.output_tokens}")
-    return passed
+
+    print("\n--- 分类汇总 ---")
+    for category, (ok, total) in by_category.items():
+        print(f"{category}：{ok}/{total}")
+    return passed, len(cases)
 
 
 def main() -> None:
@@ -314,6 +464,11 @@ def main() -> None:
         "--unit-only",
         action="store_true",
         help="只跑单元测试，跳过模型评估（无需网络）",
+    )
+    parser.add_argument(
+        "--only",
+        default=None,
+        help="只跑名字里含该子串的模型用例（例如 --only A1），便于单条调试",
     )
     args = parser.parse_args()
 
@@ -332,10 +487,10 @@ def main() -> None:
         return
 
     print("\n=== 模型评估 ===")
-    model_pass = asyncio.run(run_model_cases())
+    model_pass, model_total = asyncio.run(run_model_cases(args.only))
 
     total_pass = unit_pass + model_pass
-    total = len(UNIT_CASES) + len(MODEL_CASES)
+    total = len(UNIT_CASES) + model_total
     print(f"\n=== 合计：{total_pass}/{total} 通过 ===")
 
 
