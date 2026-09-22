@@ -14,3 +14,17 @@ agent-learning/notes-qa/before.json
 agent-learning/eval_last_run.json
 
 .ruff_cache/
+
+# 已移出仓库：PPT / PPT 工具与产物 / 基础练习
+# 备份位置：~/python-learning-extras-20260922/
+*.pptx
+output/
+_build.py
+_export.py
+_shot.mjs
+_chk.txt
+_wm.png
+_wm_extract.py
+PixWit_screenshot_*.png
+截图 *.png
+python-base/
