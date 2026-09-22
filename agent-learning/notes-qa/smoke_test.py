@@ -2,9 +2,10 @@
 
 通过后这个文件可以删掉，或留着当环境自检。
 """
+
 import asyncio
 
-import config  # noqa: F401  导入即完成 DeepSeek 配置
+import config
 from agents import Agent, Runner
 
 

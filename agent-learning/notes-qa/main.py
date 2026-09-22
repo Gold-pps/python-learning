@@ -6,13 +6,13 @@
 
 超时：单次请求和整轮提问都有上限（见 config.py），超时会打印错误并回到输入提示符。
 """
+
 import asyncio
 import sys
 
-import config  # noqa: F401
-from agents import Runner
-
+import config
 from agent import notes_qa_agent
+from agents import Runner
 
 MAX_QUESTION_LEN = 500
 
@@ -79,12 +79,13 @@ def _keep_recent_turns(history: list) -> list:
     API 直接拒掉——这是"截断"最容易踩的坑，而且只在被截断的那一次才暴露。
     """
     starts = [
-        i for i, item in enumerate(history)
+        i
+        for i, item in enumerate(history)
         if isinstance(item, dict) and item.get("role") == "user"
     ]
     if len(starts) <= MAX_HISTORY_TURNS:
-        return history          # 不超限就原样返回，避免无谓复制
-    return history[starts[-MAX_HISTORY_TURNS]:]
+        return history  # 不超限就原样返回，避免无谓复制
+    return history[starts[-MAX_HISTORY_TURNS] :]
 
 
 def prepare_history(history: list) -> list:
@@ -145,7 +146,8 @@ async def main_loop() -> None:
 
         try:
             answer, history = await ask(question, history)
-        except Exception as e:
+        # 命令行会话里任何异常都不该终结进程：打印错误后继续问下一个问题
+        except Exception as e:  # noqa: BLE001
             print(f"[错误] {type(e).__name__}: {e}")
             continue
 

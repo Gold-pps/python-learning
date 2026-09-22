@@ -14,6 +14,7 @@
    否则 `config.py` 会因为找不到 Key 直接抛 RuntimeError，第 15 周的 CI（不联网、不带密钥）
    就永远跑不起来。`load_dotenv()` 默认不覆盖已存在的环境变量，所以 `setdefault` 足够。
 """
+
 import os
 import subprocess
 import sys
@@ -26,9 +27,8 @@ if str(NOTES_QA_DIR) not in sys.path:
     # pytest.ini 里已经配了 pythonpath，这里再兜一次：无论从哪个目录调用 pytest 都能 import 到
     sys.path.insert(0, str(NOTES_QA_DIR))
 
-import pytest  # noqa: E402
-
-import config  # noqa: E402
+import config
+import pytest
 
 
 @pytest.fixture
@@ -47,15 +47,19 @@ def notes_root(tmp_path, monkeypatch):
 @pytest.fixture
 def write(notes_root):
     """在临时笔记根里写一个文件（自动建父目录），返回它的路径。"""
+
     def _write(rel: str, text: str) -> Path:
         path = notes_root / rel
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text, encoding="utf-8", newline="\n")
         return path
+
     return _write
 
 
-_SANDBOX_GUARD = "探针只能建在临时目录里：一旦落到真实仓库，就会变成下一个 `_probe_*` 残留"
+_SANDBOX_GUARD = (
+    "探针只能建在临时目录里：一旦落到真实仓库，就会变成下一个 `_probe_*` 残留"
+)
 
 
 def _make_link(link: Path, target: Path, *, is_dir: bool) -> None:
@@ -68,9 +72,15 @@ def _make_link(link: Path, target: Path, *, is_dir: bool) -> None:
             pytest.skip(f"当前环境无法创建链接（{type(exc).__name__}）：{exc}")
     # Windows 普通用户可以建 junction（不需要开发者模式）
     created = subprocess.run(
-        ["powershell", "-NoProfile", "-Command",
-         f"New-Item -ItemType Junction -Path '{link}' -Target '{target}' | Out-Null"],
-        check=False, capture_output=True, text=True,
+        [
+            "powershell",
+            "-NoProfile",
+            "-Command",
+            f"New-Item -ItemType Junction -Path '{link}' -Target '{target}' | Out-Null",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
     )
     if created.returncode != 0:
         pytest.skip(f"junction 创建失败：{created.stderr.strip()[:200]}")
@@ -85,6 +95,7 @@ def make_dir_link(notes_root, tmp_path):
     （第 14 周迁移测试时真踩过：只有 `make_file_link` 的那条用例把链接建进了
     `agent-learning/`，而同时用了 `write` 的用例因为 `write` 依赖 `notes_root` 而"碰巧"正确）。
     """
+
     def _make(rel_link: str) -> tuple[Path, Path]:
         target = tmp_path / "根外目录"
         target.mkdir(exist_ok=True)
@@ -92,12 +103,14 @@ def make_dir_link(notes_root, tmp_path):
         assert link.is_relative_to(tmp_path), f"{_SANDBOX_GUARD}（{link}）"
         _make_link(link, target, is_dir=True)
         return link, target
+
     return _make
 
 
 @pytest.fixture
 def make_file_link(notes_root, tmp_path):
     """返回一个"在笔记根内建文件链接"的函数，链接目标默认放在笔记根之外。"""
+
     def _make(rel_link: str, content: str = "OUTSIDE-SECRET\n") -> tuple[Path, Path]:
         target = tmp_path / "根外文件.md"
         target.write_text(content, encoding="utf-8", newline="\n")
@@ -106,4 +119,5 @@ def make_file_link(notes_root, tmp_path):
         link.parent.mkdir(parents=True, exist_ok=True)
         _make_link(link, target, is_dir=False)
         return link, target
+
     return _make

@@ -1,8 +1,8 @@
 """notes_qa Agent 定义。"""
-import config
-from agents import Agent, function_tool
 
+import config
 import tools
+from agents import Agent, function_tool
 
 
 @function_tool

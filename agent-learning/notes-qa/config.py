@@ -2,21 +2,22 @@
 
 其他模块 import 这个文件后，请求会自动发往 DeepSeek。
 """
+
 import os
 from pathlib import Path
 
-from dotenv import load_dotenv
-from openai import AsyncOpenAI
 from agents import (
     set_default_openai_api,
     set_default_openai_client,
     set_tracing_disabled,
 )
+from dotenv import load_dotenv
+from openai import AsyncOpenAI
 
 # ---- 路径 ----
-NOTES_QA_DIR = Path(__file__).resolve().parent          # .../agent-learning/notes-qa
-AGENT_LEARNING_DIR = NOTES_QA_DIR.parent                # .../agent-learning
-NOTES_ROOT = AGENT_LEARNING_DIR                         # 笔记根目录
+NOTES_QA_DIR = Path(__file__).resolve().parent  # .../agent-learning/notes-qa
+AGENT_LEARNING_DIR = NOTES_QA_DIR.parent  # .../agent-learning
+NOTES_ROOT = AGENT_LEARNING_DIR  # 笔记根目录
 
 # ---- 统一模型名 ----
 MODEL = "deepseek-flash"

@@ -2,6 +2,7 @@
 
 这两个用例不需要笔记目录，测的是"入口的边界"与"超时配置没退化成无限等待"。
 """
+
 import config
 from main import MAX_QUESTION_LEN, check_input
 

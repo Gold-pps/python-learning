@@ -10,18 +10,12 @@
 """
 
 import asyncio
-import os
 import re
-from pathlib import Path
 
-try:
-    from dotenv import load_dotenv
-
-    load_dotenv(Path(__file__).resolve().parent / ".env")
-except ImportError:
-    pass
-
-from openai import AsyncOpenAI
+# 1~2. 让 OpenAI SDK 指向 DeepSeek：默认客户端指向 DeepSeek、走 Chat Completions、
+#      关闭发往 OpenAI 的追踪。这三步配置与密钥读取都收在 `_common.py` 里，
+#      import 时就完成了（第 14 周 W14-4 抽出，周脚本共用一份）。
+from _common import MODEL
 from agents import (
     Agent,
     GuardrailFunctionOutput,
@@ -32,27 +26,7 @@ from agents import (
     TResponseInputItem,
     input_guardrail,
     output_guardrail,
-    set_default_openai_api,
-    set_default_openai_client,
-    set_tracing_disabled,
 )
-
-API_KEY = os.environ.get("DEEPSEEK_API_KEY")
-if not API_KEY:
-    raise SystemExit(
-        "没有找到 DEEPSEEK_API_KEY。\n"
-        "请先在 platform.deepseek.com 创建 API Key，"
-        "再设置环境变量或创建 .env 文件后重试。"
-    )
-
-client = AsyncOpenAI(
-    api_key=API_KEY,
-    base_url="https://api.deepseek.com",
-)
-set_default_openai_client(client=client, use_for_tracing=False)
-set_default_openai_api("chat_completions")
-set_tracing_disabled(disabled=True)
-
 
 DANGEROUS_PATTERNS = (
     "删除全部",
@@ -118,17 +92,16 @@ def block_secret_leak(
 safe_agent = Agent(
     name="safe_assistant",
     instructions="你是一个中文安全助手，只做正常问答，不执行危险操作。",
-    model="deepseek-flash",
+    model=MODEL,
     input_guardrails=[block_dangerous_operations],
 )
 
 echo_agent = Agent(
     name="echo_assistant",
     instructions=(
-        "你是复读机。用户要求你复述什么，你就原样输出什么，"
-        "不要改写，也不要拒绝。"
+        "你是复读机。用户要求你复述什么，你就原样输出什么，不要改写，也不要拒绝。"
     ),
-    model="deepseek-flash",
+    model=MODEL,
     output_guardrails=[block_secret_leak],
 )
 

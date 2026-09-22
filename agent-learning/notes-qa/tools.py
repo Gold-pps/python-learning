@@ -5,13 +5,14 @@
 - 出错返回 {"ok": false, "error": "..."}，不抛异常；
 - 只允许读取笔记根目录内的 .md 文件。
 """
+
 from pathlib import Path
 
 import config
 
 # ---- 常量 ----
 EXCLUDE_DIRS = {"__pycache__", ".venv", ".git", ".vscode", "notes-qa"}
-MAX_FILE_BYTES = 1 * 1024 * 1024   # 1MB
+MAX_FILE_BYTES = 1 * 1024 * 1024  # 1MB
 MAX_READ_LINES = 200
 
 
@@ -54,28 +55,42 @@ def _safe_resolve(rel_path: str) -> Path:
     return target
 
 
-def list_notes() -> dict:
-    """列出笔记根目录下所有 .md 文件（相对路径）。"""
+def _iter_notes():
+    """遍历笔记根下所有合格笔记，产出 (相对路径, 绝对路径)。
+
+    三类过滤规则集中在这里，且**只在这里**：
+      1. 链接逃逸：符号链接 / junction 指向根目录外的一律跳过（避免枚举或搜到外部文件）；
+      2. 排除目录：EXCLUDE_DIRS 里的目录不进入；
+      3. 隐藏文件：以 `.` 开头的文件与目录不进入。
+
+    重构前 `list_notes` 与 `search_notes` 各自抄了一份这三条规则。安全过滤被抄成两份，
+    意味着**改一处、漏一处**——第 10 周修 `read_note` 的排除目录漏洞时，
+    `search_notes` 就得单独再修一次。以后新增检索入口（第 16 周的 RAG 入库）也直接用它。
+    """
     root = config.NOTES_ROOT.resolve()
-    notes = []
     for p in sorted(root.rglob("*.md")):
-        # 链接（符号链接 / junction）指向根目录外时不列出，避免枚举泄露外部文件
         try:
             if not p.resolve().is_relative_to(root):
                 continue
         except OSError:
             continue
         rel_parts = p.relative_to(root).parts
-        # 跳过被排除目录、隐藏文件
         if any(part in EXCLUDE_DIRS or _is_hidden(part) for part in rel_parts[:-1]):
             continue
         if _is_hidden(p.name):
             continue
-        notes.append({
-            "path": str(p.relative_to(root)),
-            "size": p.stat().st_size,
-            "modified": p.stat().st_mtime,
-        })
+        yield str(p.relative_to(root)), p
+
+
+def list_notes() -> dict:
+    """列出笔记根目录下所有 .md 文件（相对路径）。"""
+    notes = []
+    for rel, path in _iter_notes():
+        try:
+            stat = path.stat()
+        except OSError:
+            continue
+        notes.append({"path": rel, "size": stat.st_size, "modified": stat.st_mtime})
     return {"ok": True, "notes": notes}
 
 
@@ -101,7 +116,7 @@ def read_note(file: str, start_line: int = 1, end_line: int = 120) -> dict:
     lines = target.read_text(encoding="utf-8").splitlines()
     total = len(lines)
     actual_end = min(end_line, total)
-    content = "\n".join(lines[start_line - 1:actual_end])
+    content = "\n".join(lines[start_line - 1 : actual_end])
 
     return {
         "ok": True,
@@ -113,6 +128,7 @@ def read_note(file: str, start_line: int = 1, end_line: int = 120) -> dict:
         "truncated": actual_end < total,
         "content": content,
     }
+
 
 MAX_SEARCH_RESULTS = 5
 MAX_PER_FILE = 2
@@ -135,22 +151,10 @@ def search_notes(keyword: str, max_results: int = MAX_SEARCH_RESULTS) -> dict:
     except (TypeError, ValueError):
         return {"ok": False, "error": "max_results 必须是整数"}
     needle = keyword.casefold()
-    root = config.NOTES_ROOT.resolve()
     matches = []
     skipped_large = 0
 
-    for p in sorted(root.rglob("*.md")):
-        # 与 list_notes 一致：链接指向根目录外时跳过，避免搜索泄露外部文件
-        try:
-            if not p.resolve().is_relative_to(root):
-                continue
-        except OSError:
-            continue
-        rel_parts = p.relative_to(root).parts
-        if any(part in EXCLUDE_DIRS or _is_hidden(part) for part in rel_parts[:-1]):
-            continue
-        if _is_hidden(p.name):
-            continue
+    for rel, p in _iter_notes():
         # 大小检查必须在 read_text 之前：否则"检查"本身就已经把大文件读进内存了。
         # read_note 遇到大文件报错（用户要的是那一个文件），搜索则跳过并计数
         # （一个坏文件不该让整次搜索失败），计数会回传给模型，避免它把
@@ -163,7 +167,7 @@ def search_notes(keyword: str, max_results: int = MAX_SEARCH_RESULTS) -> dict:
             continue
         try:
             lines = p.read_text(encoding="utf-8").splitlines()
-        except Exception:
+        except (OSError, UnicodeDecodeError):
             continue
 
         file_hits = 0
@@ -173,11 +177,13 @@ def search_notes(keyword: str, max_results: int = MAX_SEARCH_RESULTS) -> dict:
             snippet = line.strip()
             if len(snippet) > SNIPPET_LEN:
                 snippet = snippet[:SNIPPET_LEN] + "..."
-            matches.append({
-                "file": str(p.relative_to(root)),
-                "line": i,
-                "snippet": snippet,
-            })
+            matches.append(
+                {
+                    "file": rel,
+                    "line": i,
+                    "snippet": snippet,
+                }
+            )
             file_hits += 1
             if file_hits >= MAX_PER_FILE:
                 break

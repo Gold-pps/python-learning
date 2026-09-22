@@ -7,33 +7,12 @@
    python 00_first_api_call.py
 """
 
-import os
-from pathlib import Path
+# 读 .env、取密钥、建客户端都收在 `_common.py` 里（第 14 周 W14-4 抽出）。
+# 本脚本不走 Agents SDK，所以用同步客户端 sync_client。
+from _common import MODEL, sync_client
 
-try:
-    from dotenv import load_dotenv
-
-    load_dotenv(Path(__file__).resolve().parent / ".env")
-except ImportError:
-    pass
-
-from openai import OpenAI
-
-API_KEY = os.environ.get("DEEPSEEK_API_KEY")
-if not API_KEY:
-    raise SystemExit(
-        "没有找到 DEEPSEEK_API_KEY。\n"
-        "请先在 platform.deepseek.com 创建 API Key，"
-        "再设置环境变量或创建 .env 文件后重试。"
-    )
-
-client = OpenAI(
-    api_key=API_KEY,
-    base_url="https://api.deepseek.com",
-)
-
-response = client.chat.completions.create(
-    model="deepseek-flash",
+response = sync_client.chat.completions.create(
+    model=MODEL,
     messages=[
         {"role": "system", "content": "你是一个耐心的老师。"},
         {"role": "user", "content": "用一句话解释什么是 Agent。"},

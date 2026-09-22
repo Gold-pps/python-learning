@@ -3,18 +3,18 @@
 覆盖原 `eval_cases.py` 的 U1、U3、U4、U5、U8(前半)、U9、U10。
 与原版最大的区别：所有探针都写在 `tmp_path` 里，测试不再碰真实仓库。
 """
-import pytest
 
+import pytest
 import tools
 
 
 @pytest.mark.parametrize(
     "path",
     [
-        ".env",           # 隐藏文件（也是密钥所在）
-        "../.env",        # 上跳
-        "/etc/passwd",    # 绝对路径
-        "笔记.txt",        # 非 .md
+        ".env",  # 隐藏文件（也是密钥所在）
+        "../.env",  # 上跳
+        "/etc/passwd",  # 绝对路径
+        "笔记.txt",  # 非 .md
     ],
 )
 def test_rejects_non_markdown_paths(write, path):

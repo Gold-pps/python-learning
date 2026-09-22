@@ -26,6 +26,7 @@ def run_script(filename: str) -> str:
         errors="replace",
         cwd=str(AGENT_DIR),
         timeout=180,
+        check=False,  # 失败由下面的 returncode 分支处理，不让 subprocess 抛异常
     )
     if proc.returncode != 0:
         return (proc.stdout or "") + (proc.stderr or "")

@@ -15,6 +15,7 @@
 省钱提示：高峰时段是工作日 09:00-12:00、14:00-18:00（北京时间），其余时间和周末是低谷价
 （半价）。8 轮 × 两臂的总量在几万 token 量级，实际花费不到一毛钱，但请放在低谷跑。
 """
+
 from __future__ import annotations
 
 import argparse
@@ -22,11 +23,10 @@ import asyncio
 import json
 import time
 
-import config  # noqa: F401  —— import 之后所有请求自动发往 DeepSeek
-from agents import ModelSettings, RunConfig, Runner
-
+import config
 import main
 from agent import notes_qa_agent
+from agents import ModelSettings, RunConfig, Runner
 
 # 固定问题表：必须能触发工具调用，才会把 read_note 的返回正文灌进历史。
 # 8 条问题刚好一轮一个，超过 8 轮就循环使用（历史里会重复出现，正好放大差异）。
@@ -72,7 +72,9 @@ async def run(turns: int, trim: bool, temperature: float) -> list[dict]:
 
         started = time.perf_counter()
         async with asyncio.timeout(config.OVERALL_TIMEOUT):
-            result = await Runner.run(notes_qa_agent, input_items, run_config=run_config)
+            result = await Runner.run(
+                notes_qa_agent, input_items, run_config=run_config
+            )
         elapsed = time.perf_counter() - started
 
         usage = result.context_wrapper.usage
@@ -112,28 +114,46 @@ def summarize(label: str, rows: list[dict]) -> None:
     out = sum(r["output_tokens"] for r in rows)
 
     print(f"\n=== {label} ===")
-    print(f"输入 token：第 1 轮 {first['input_tokens']} → 第 {last['turn']} 轮 {last['input_tokens']}"
-          f"（倍数 {last['input_tokens'] / max(first['input_tokens'], 1):.2f}×）")
-    print(f"history  ：第 1 轮 {first['history_chars']} 字符 → 第 {last['turn']} 轮 {last['history_chars']} 字符")
-    print(f"合计：输入 {hit_in + miss_in}（缓存命中 {hit_in} / 未命中 {miss_in}）、输出 {out}")
+    print(
+        f"输入 token：第 1 轮 {first['input_tokens']} → 第 {last['turn']} 轮 {last['input_tokens']}"
+        f"（倍数 {last['input_tokens'] / max(first['input_tokens'], 1):.2f}×）"
+    )
+    print(
+        f"history  ：第 1 轮 {first['history_chars']} 字符 → 第 {last['turn']} 轮 {last['history_chars']} 字符"
+    )
+    print(
+        f"合计：输入 {hit_in + miss_in}（缓存命中 {hit_in} / 未命中 {miss_in}）、输出 {out}"
+    )
     for name, price in PRICE.items():
-        cost = (miss_in * price["cache_miss"] + hit_in * price["cache_hit"] + out * price["output"]) / 1e6
-        print(f"  按{'高峰' if name == 'peak' else '低谷'}价估算：${cost:.4f}（约 {cost * 7.1:.3f} 元）")
+        cost = (
+            miss_in * price["cache_miss"]
+            + hit_in * price["cache_hit"]
+            + out * price["output"]
+        ) / 1e6
+        print(
+            f"  按{'高峰' if name == 'peak' else '低谷'}价估算：${cost:.4f}（约 {cost * 7.1:.3f} 元）"
+        )
 
     # 直接贴进笔记的表格行
     print("\n贴进笔记用：")
     for r in rows:
-        print(f"| {r['turn']} | {r['input_tokens']} | {r['cached_input_tokens']} "
-              f"| {r['history_chars']} | {r['seconds']} |")
+        print(
+            f"| {r['turn']} | {r['input_tokens']} | {r['cached_input_tokens']} "
+            f"| {r['history_chars']} | {r['seconds']} |"
+        )
 
 
 def main_cli() -> None:
     parser = argparse.ArgumentParser(description="会话历史 token 曲线实测")
     parser.add_argument("--turns", type=int, default=8, help="问答轮数（默认 8）")
-    parser.add_argument("--no-trim", action="store_true",
-                        help="不收敛 history（等价于 T3 修复前的行为）")
-    parser.add_argument("--temp", type=float, default=0.0,
-                        help="采样温度，默认 0 让两臂更可比")
+    parser.add_argument(
+        "--no-trim",
+        action="store_true",
+        help="不收敛 history（等价于 T3 修复前的行为）",
+    )
+    parser.add_argument(
+        "--temp", type=float, default=0.0, help="采样温度，默认 0 让两臂更可比"
+    )
     parser.add_argument("--json", dest="json_path", help="把原始数据存成 JSON 文件")
     args = parser.parse_args()
 
@@ -144,8 +164,12 @@ def main_cli() -> None:
 
     if args.json_path:
         with open(args.json_path, "w", encoding="utf-8") as fh:
-            json.dump({"label": label, "turns": args.turns, "rows": rows},
-                      fh, ensure_ascii=False, indent=2)
+            json.dump(
+                {"label": label, "turns": args.turns, "rows": rows},
+                fh,
+                ensure_ascii=False,
+                indent=2,
+            )
         print(f"\n原始数据已写入 {args.json_path}")
 
 

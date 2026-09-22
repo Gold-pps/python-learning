@@ -1,0 +1,15 @@
+# ruff 配置（第 14 周 W14-5 建立）
+#
+# 检查范围只覆盖**学习代码**（`agent-learning/`：周脚本 + notes-qa 项目）。
+# 其余一律不查，每条都有理由，不是图省事：
+#   - `python-base/`：CS50 风格的基础练习，`AGENTS.md` 写明"暂未整理"，
+#     本轮强行格式化等于替它做一次没学过的重构；
+#   - 仓库根下的 `_build.py` / `_export.py` / `_shot.mjs` / `output/` / `_qa/`：
+#     PPT 制作工具与产物（`_export.py` 用 Windows 专用 win32com、`_shot.mjs` 里还留着
+#     `C:/Users/czy/...` 的绝对路径），属第 15 周"仓库瘦身"要处置的对象；
+#   - 4 个 `.pptx` 与截图：二进制，ruff 本来也不看。
+#
+# 规则集用 ruff 默认，不额外 `select`：默认已覆盖 pyflakes、pycodestyle 与常见陷阱规则。
+# 先做到"默认全绿"，等某类规则真的吵到影响工作再单独调——一上来 `select = ["ALL"]`
+# 会得到几百条风格意见，最后的结果通常是把配置整个关掉。
+include = ["agent-learning/**/*.py"]

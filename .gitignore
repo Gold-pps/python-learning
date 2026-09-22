@@ -10,3 +10,7 @@ debug.log
 # 实验中间产物（第 13 周 token 曲线实验的原始数据，可随时重跑生成）
 agent-learning/notes-qa/after.json
 agent-learning/notes-qa/before.json
+# 模型评估的完整结果（含回答全文，用 --save 生成，可随时重跑）
+agent-learning/eval_last_run.json
+
+.ruff_cache/
