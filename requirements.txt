@@ -1,37 +1,20 @@
-# python-learning 依赖清单
-# 生成日期：2026-09-15（本次按 `.venv` 实际安装版本重新对齐）
-# 覆盖范围：agent-learning/（DeepSeek + OpenAI Agents SDK）、python-base/（基础练习）
-# Python 版本：≥3.12（main.py 的 asyncio.timeout 需 3.11+，eval_cases.py 的 Path.is_junction 需 3.12+）
-# 本机实际环境：Python 3.14.4，虚拟环境位于仓库根目录 .venv（用 uv 创建）
+# 本文件已改为“说明文件”，不再是依赖清单的真相来源。
 #
-# 安装方式：
+# 真相来源：
+#   - pyproject.toml  → 直接依赖（openai / openai-agents / python-dotenv + dev 组 pytest / ruff）
+#   - uv.lock         → 完整解析后的锁文件（含传递依赖）
+#
+# 环境安装（推荐，用 uv）：
+#   uv sync                     # 按 uv.lock 安装到 .venv
+#   uv sync --no-dev            # 只要运行依赖，不装 pytest / ruff
+#
+# 兼容旧方式的等价命令：
 #   uv venv .venv
-#   uv pip install --python .venv/bin/python -r requirements.txt
-# 或：
-#   python -m venv .venv
-#   .venv/bin/python -m pip install -r requirements.txt
-
-# ---- Agent 学习项目（模型后端为 DeepSeek）----
-openai==3.8.0
-openai-agents==0.22.0
-python-dotenv==1.2.3
-
-# ---- python-base 基础练习 ----
-requests==2.34.2
-
-# ---- 可选：python-base 里部分脚本的依赖（当前 .venv 未安装，版本沿用旧环境记录）----
-# 需要跑对应脚本时再安装，否则会 ImportError：
-#   - say.py          → cowsay、pyttsx3
-#   - itunes.py       → requests（上面已装，可直接跑）
-#   - test_calculator.py / test_hello.py → pytest
-# cowsay==6.1
-# pyttsx3==2.99
-# pytest==9.1.1
-
-# ---- 说明 ----
-# 1. mcp、pydantic、httpx2、jsonschema、typing_extensions 等由 openai-agents 传递安装，
-#    此处不单独钉版本；如需完全锁定请生成 uv.lock；
-# 2. 历史备注：本文件原钉 python-dotenv==1.2.1、requests==2.33.1，与实际环境不符，已更正为
-#    1.2.3 / 2.34.2；
-# 3. 原注释写的"agent/ 学习项目"目录名已过时，实际为 agent-learning/；"Miniconda 已卸载"
-#    属历史环境说明，当前统一使用仓库根目录的 .venv。
+#   uv pip install --python .venv/bin/python openai-agents python-dotenv
+#
+# Python 版本要求：≥3.12（main.py 的 asyncio.timeout 需 3.11+，
+# eval_cases.py 的 Path.is_junction() 需 3.12+）。本机实际使用 3.14.4。
+#
+# 历史备注：本文件此前钉过 openai==3.8.0 / openai-agents==0.22.0 /
+# python-dotenv==1.2.3 / requests==2.34.2，现已全部迁移到 pyproject.toml。
+# requests 只在旧的 python-base/ 练习里用到，该目录已移出仓库。

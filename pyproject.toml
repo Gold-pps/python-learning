@@ -1,0 +1,21 @@
+[project]
+name = "python-learning"
+version = "0.1.0"
+description = "个人 Python 学习仓库：Agent 开发 + notes-qa 项目"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "openai==3.8.0",
+    "openai-agents==0.22.0",
+    "python-dotenv==1.2.3",
+]
+
+[dependency-groups]
+dev = [
+    "pytest==9.1.1",
+    "ruff==0.16.8",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["agent-learning/notes-qa/tests"]
+pythonpath = ["agent-learning/notes-qa"]
