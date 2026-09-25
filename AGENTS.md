@@ -2,7 +2,7 @@
 
 本文件写给进入本仓库的 AI 助手（Codex 等）。开始工作前请先读这里。
 
-> 最后更新：2026-09-22（第 15 周 G1 工程化收口：历史重写、依赖与 CI 落地）
+> 最后更新：2026-09-25（第 16、17 周完成：文档解析层 + 本地向量化；下一步第 18 周）
 
 ## 仓库是什么
 
@@ -18,10 +18,11 @@
 ## 当前进度
 
 - 第一阶段 12 周已完成（2026-09-13 收尾）；
-- 第二阶段进行中：第 13、14 周已完成并通过验收，当前在第 15 周（G1 验收周）；
+- 第二阶段进行中：**第 13~17 周已完成**（G1 已收口，G2 进行中），
+  当前在**第 18 周（混合检索 + 重排）**；
 - 恢复上下文请先读 `agent-learning/学习进度.md`；
 - 计划与验收标准见 `agent-learning/第二阶段学习规划.md`；
-- 技术债台账见 `agent-learning/工程化改造记录.md`（T1~T14）。
+- 技术债台账见 `agent-learning/工程化改造记录.md`（T1~T19）。
 
 ## 目录结构
 
@@ -57,6 +58,14 @@ python-learning/
 │       ├── eval_cases.py      本地评估（12 单元 + 10 模型）
 │       ├── exp_history_tokens.py  T3 会话历史 token 曲线实验
 │       ├── smoke_test.py      环境自检
+│       ├── constants.py       无依赖共享常量（断开 rag 与 agents 的依赖链）
+│       ├── rag/              第 16 周起：RAG（解析 / 切分 / 向量化 / 索引）
+│       │   ├── chunk.py       Chunk 数据结构
+│       │   ├── parsers.py     .md / .txt / .pdf / .docx 解析
+│       │   ├── chunker.py     中文友好切分
+│       │   ├── embedder.py    双后端（bge / fastembed）
+│       │   └── index.py       构建 + 增量跳过 + CLI
+│       ├── data/             语料与索引（不进 Git）
 │       └── tests/             pytest 用例 + conftest.py
 └── .venv/                     Python 虚拟环境（不提交）
 ```
@@ -75,6 +84,11 @@ uv sync --no-dev       # 只要运行依赖
 # 测试与检查（仓库根）
 uv run pytest -q       # 46 passed
 uv run ruff check .    # All checks passed
+# RAG 环境（独立 .venv-rag，需 torch；在 agent-learning/notes-qa 下）
+# Windows：
+& "..\..\.venv-rag\Scripts\python.exe" -m rag.index build
+# Linux / macOS：
+../../.venv-rag/bin/python -m rag.index build
 
 # 项目：交互式问答
 cd agent-learning/notes-qa
@@ -98,6 +112,11 @@ uv run python eval_cases.py --unit-only   # 只跑单元测试（无需网络）
 - **模型评估由用户在自己时段跑**（会花 token）。AI 侧只跑 `--unit-only` 与离线测试；
 - **无答案题的关键词不能写进 `agent-learning/*.md`**——那等于把答案卡交给被检索的 Agent
   （台账 T8"发现一"）。题库与答案卡只写在 `notes-qa/` 内（该目录已在 `EXCLUDE_DIRS` 中）。
+
+- **Windows 上开发**：命令用 PowerShell，超过三行的脚本写成临时 `.py` 文件再跑
+  （`python -c "长字符串"` 的引号会被 PowerShell 吃掉）；
+- **跑 pytest 需要管理员权限**（或开 Windows 开发者模式）：普通用户建不了文件符号链接，
+  会有 1 条 skip。这是平台限制，不是代码 bug。
 
 ## 关于沙箱网络（2026-09-22 修正）
 
