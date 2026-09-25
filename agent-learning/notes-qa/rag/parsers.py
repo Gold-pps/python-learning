@@ -12,12 +12,13 @@
 - 单文件大小上限沿用 config.MAX_FILE_BYTES；
 - 解析失败返回空列表（由调用方记入失败清单），不抛异常。
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
 
-import tools
+from constants import MAX_FILE_BYTES
 from docx import Document
 from pypdf import PdfReader
 
@@ -35,10 +36,8 @@ class ParsedBlock:
 def _check_size(path: Path) -> None:
     """超过 MAX_FILE_BYTES 直接拒绝——与 read_note 的策略一致（报错，不静默跳过）。"""
     size = path.stat().st_size
-    if size > tools.MAX_FILE_BYTES:
-        raise ValueError(
-            f"文件超过 {tools.MAX_FILE_BYTES} 字节：{path}（{size} 字节）"
-        )
+    if size > MAX_FILE_BYTES:
+        raise ValueError(f"文件超过 {MAX_FILE_BYTES} 字节：{path}（{size} 字节）")
 
 
 def parse_md(path: Path) -> list[ParsedBlock]:
@@ -128,6 +127,7 @@ def parse_txt(path: Path) -> list[ParsedBlock]:
     flush(len(lines))
     return blocks
 
+
 def parse_pdf(path: Path) -> list[ParsedBlock]:
     """按页提取 PDF 文本。
 
@@ -190,7 +190,6 @@ def parse_docx(path: Path) -> list[ParsedBlock]:
             )
         )
     return blocks
-
 
 
 # 后缀 → 解析函数的派发表。PDF / docx 在下一步补上。

@@ -13,6 +13,7 @@ start / end 的语义随 doc_type 不同：
 - docx：从 1 开始的段落号。
 具体由各自的 parser 保证一致；Chunk 本身不解释这两个字段。
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -22,14 +23,14 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class Chunk:
-    id: str            # 稳定标识：source_path:start:hash 前 16 位
-    source_path: str   # 相对笔记根的路径，如 "第7周笔记.md"
-    doc_type: str      # "md" / "txt" / "pdf" / "docx"
-    locator: str       # 人类可读的位置：PDF 页码 / 标题路径
-    start: int         # 片段起始位置（闭区间，含）
-    end: int           # 片段结束位置（闭区间，含）
-    text: str          # 片段正文
-    hash: str          # text 的 sha256 前 16 位
+    id: str  # 稳定标识：source_path:start:hash 前 16 位
+    source_path: str  # 相对笔记根的路径，如 "第7周笔记.md"
+    doc_type: str  # "md" / "txt" / "pdf" / "docx"
+    locator: str  # 人类可读的位置：PDF 页码 / 标题路径
+    start: int  # 片段起始位置（闭区间，含）
+    end: int  # 片段结束位置（闭区间，含）
+    text: str  # 片段正文
+    hash: str  # text 的 sha256 前 16 位
 
     @classmethod
     def create(

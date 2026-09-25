@@ -3,6 +3,7 @@
 样本全部在运行时动态生成（写进 tmp_path），不依赖仓库里的真实文件——
 沿用第 14 周的原则：测试的清理责任交给 pytest，不写 finally。
 """
+
 from __future__ import annotations
 
 import pytest
@@ -43,7 +44,9 @@ def test_parse_pdf_extracts_per_page_text(tmp_path):
 
     blocks = parse_pdf(pdf_path)
     assert len(blocks) == 2
-    assert blocks[0].locator == "第 1 页" and blocks[0].start == 1 and blocks[0].end == 1
+    assert (
+        blocks[0].locator == "第 1 页" and blocks[0].start == 1 and blocks[0].end == 1
+    )
     assert "page one" in blocks[0].text
     assert blocks[1].locator == "第 2 页"
     assert "page two" in blocks[1].text

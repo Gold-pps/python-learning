@@ -4,6 +4,7 @@
 钉死具体字符数会让调参时到处误报（这是第 14 周 T13 的教训：钉文档承诺值，
 不钉明确待调的初值）。
 """
+
 from __future__ import annotations
 
 from rag.chunker import MAX_CHARS, chunk_blocks

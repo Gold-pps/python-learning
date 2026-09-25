@@ -9,10 +9,10 @@
 from pathlib import Path
 
 import config
+from constants import MAX_FILE_BYTES
 
 # ---- 常量 ----
 EXCLUDE_DIRS = {"__pycache__", ".venv", ".git", ".vscode", "notes-qa"}
-MAX_FILE_BYTES = 1 * 1024 * 1024  # 1MB
 MAX_READ_LINES = 200
 
 

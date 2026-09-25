@@ -28,3 +28,8 @@ _wm_extract.py
 PixWit_screenshot_*.png
 截图 *.png
 python-base/
+
+.venv-rag/
+
+# RAG 数据与索引（不进 Git；语料自备，索引可重建）
+agent-learning/notes-qa/data/

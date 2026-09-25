@@ -14,6 +14,7 @@
 - Chunk 顺序与原文件一致；
 - 合并进来的块之间以空行分隔，保留原文段落结构。
 """
+
 from __future__ import annotations
 
 from dataclasses import replace
