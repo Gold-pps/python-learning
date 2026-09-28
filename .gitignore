@@ -12,6 +12,9 @@ agent-learning/notes-qa/after.json
 agent-learning/notes-qa/before.json
 # 模型评估的完整结果（含回答全文，用 --save 生成，可随时重跑）
 agent-learning/eval_last_run.json
+# 第 19 周起：重排结果（对比表的缓存，重算表格不必再调模型）与回答级评测全文
+agent-learning/notes-qa/eval/rag_eval_rerank.json
+agent-learning/notes-qa/eval/rag_answer_last_run.json
 
 .ruff_cache/
 

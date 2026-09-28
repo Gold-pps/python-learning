@@ -16,6 +16,12 @@ from agent import notes_qa_agent
 from agents import Runner
 from agents.exceptions import MaxTurnsExceeded
 
+# 引用判据抽到了 eval/answer_judge.py（无依赖模块）：第 19 周的
+# eval/rag_answer_eval.py 跑在 .venv-rag 里，那边没有 openai-agents，
+# 判据不能长在本文件里（台账 T18 的边界）。这里保留同名入口，行为不变。
+from eval.answer_judge import extract_cited_files, has_bracket_citation
+from eval.answer_judge import norm_name as _norm_name
+
 # ---------- 单元测试（不走模型） ----------
 
 
@@ -415,6 +421,7 @@ MODEL_CASES = [
 
 import re
 
+
 # 引用格式：`agent.py` 的指令约定写成 [文件名:起始行-结束行]（也接受 [文件名:12] 这种单行号）。
 #
 # 但实测模型在长回答里会漂移成反引号：`工程化改造记录.md:158-166`。
@@ -422,36 +429,11 @@ import re
 #   - 内容判据用宽松的（两种都认），回答的是"有没有给出可回查的出处"；
 #   - 格式合规单独判定（has_bracket_citation），回答的是"有没有守住输出契约"。
 # 混在一起会把"格式不合规"误报成"没找到出处"——第 14 周 T10 就是这么踩到的。
-_BRACKET_CITATION_RE = re.compile(r"\[([^\[\]:]+?\.md)\s*:[^\[\]]*\]")
-_BACKTICK_CITATION_RE = re.compile(r"`([^`\[\]:]+?\.md)\s*:[^`\[\]]*`")
-
-
 def _normalize(text: str) -> str:
     """去掉 Markdown 粗体/斜体标记和多余空白，便于关键词匹配。"""
     text = re.sub(r"\*+", "", text)  # 去 **bold** *italic*
     text = re.sub(r"\s+", "", text)  # 去所有空白
     return text.casefold()
-
-
-def _norm_name(name: str) -> str:
-    """文件名归一化：回答里可能写成「第 7 周笔记.md」，去掉空白再比。"""
-    return re.sub(r"\s+", "", name)
-
-
-def extract_cited_files(text: str) -> set[str]:
-    """从回答里抽出被引用的文件名（归一化后），方括号与反引号两种写法都认。
-
-    这比最初"文件名作为子串出现在回答里"严格得多：必须真的写出 `文件名:行号` 才算引用。
-    比只认方括号的版本宽松：那种写法会把"格式漂移"误判成"没有引用"。
-    """
-    bracket = {_norm_name(m.group(1)) for m in _BRACKET_CITATION_RE.finditer(text)}
-    backtick = {_norm_name(m.group(1)) for m in _BACKTICK_CITATION_RE.finditer(text)}
-    return bracket | backtick
-
-
-def has_bracket_citation(text: str) -> bool:
-    """是否出现符合约定的 `[文件名:行号]` 引用（用于单独统计格式合规率）。"""
-    return _BRACKET_CITATION_RE.search(text) is not None
 
 
 def check_model_output(text: str, case: dict) -> list[str]:

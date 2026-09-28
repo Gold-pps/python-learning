@@ -38,21 +38,49 @@ def _iter_corpus_files(corpus_dir: Path):
         yield p
 
 
-def _load_old_vectors(index_dir: Path) -> tuple[dict[str, Chunk], np.ndarray | None]:
-    """读旧索引，返回 (hash -> Chunk, 旧 vectors)。索引不存在时返回 ({}, None)。"""
+def _load_old_vectors(
+    index_dir: Path, backend: str | None
+) -> tuple[list[Chunk], np.ndarray | None, str]:
+    """读旧索引，返回 `(旧 chunks 列表, 旧 vectors, 弃用原因)`；可用时原因为空串。
+
+    **返回列表而不是 `{hash: Chunk}` 字典**——这一点至关重要：调用方要按
+    "列表下标 = `vectors.npz` 的行号"来搬运旧向量，而字典一旦按 hash 去重，
+    它的下标就不再等于真实行号了（详见 `build()` 里的说明与台账 T29）。
+
+    三个"不可信就整体重算"的条件，第三条是第 18 周补的：
+
+    1. 三件套不全（比如上次构建崩了）；
+    2. chunks 与 vectors 行数不一致；
+    3. **backend 与 `meta.json` 里记的不一致**——增量跳过只按内容 hash 判断，
+       如果上一份索引是 bge 算的、这次用 fastembed，旧向量会被原样搬过来，
+       同时 `meta.json` 的 model 被改写成新后端：**数据没变、标签变了**。
+       今天两个后端跑同一个模型、向量等价（交叉相似度 1.0），看不出问题；
+       等哪天真的换了模型，这就是一份静默的错误索引。
+       宁可多算一次，也不让"跳过"跨过后端边界。
+    """
     chunks_path = index_dir / "chunks.jsonl"
     vectors_path = index_dir / "vectors.npz"
+    meta_path = index_dir / "meta.json"
     if not chunks_path.exists() or not vectors_path.exists():
-        return {}, None
+        return [], None, "三件套不全"
+    try:
+        old_backend = json.loads(meta_path.read_text(encoding="utf-8")).get("model")
+    except (OSError, ValueError) as exc:
+        return [], None, f"meta.json 读不出来（{type(exc).__name__}）"
+    if backend is not None and old_backend != backend:
+        return [], None, f"后端变了（旧 {old_backend!r} → 新 {backend!r}）"
     old_chunks: list[Chunk] = []
     for line in chunks_path.read_text(encoding="utf-8").splitlines():
         if line.strip():
             old_chunks.append(Chunk.from_json(line))
     old_vecs = np.load(vectors_path)["vectors"]
     if len(old_chunks) != old_vecs.shape[0]:
-        # 索引不一致（比如上次构建崩了），放弃旧索引重算
-        return {}, None
-    return {c.hash: c for c in old_chunks}, old_vecs
+        return (
+            [],
+            None,
+            f"行数不一致（chunks {len(old_chunks)} / vectors {old_vecs.shape[0]}）",
+        )
+    return old_chunks, old_vecs, ""
 
 
 def build(
@@ -88,14 +116,19 @@ def build(
         )
         all_chunks.extend(chunks)
 
-    # 2. 增量判断
-    old_by_hash, old_vecs = _load_old_vectors(index_dir)
-    new_chunks = [c for c in all_chunks if c.hash not in old_by_hash]
+    # 2. 增量判断（后端换了就不算"增量"，见 _load_old_vectors 的说明）
+    old_chunks, old_vecs, old_note = _load_old_vectors(
+        index_dir, getattr(embedder, "backend", None)
+    )
+    old_hashes = {c.hash for c in old_chunks}
+    new_chunks = [c for c in all_chunks if c.hash not in old_hashes]
 
     if verbose:
         print(
             f"[index] 文件 {files}，片段总数 {len(all_chunks)}，其中新增 {len(new_chunks)}"
         )
+        if old_note:
+            print(f"[index] 旧索引整体重算：{old_note}")
         if failures:
             print(f"[index] 解析失败 {len(failures)} 个：")
             for f in failures:
@@ -108,11 +141,21 @@ def build(
         new_vecs = np.zeros((0, embedder.dim), dtype=np.float32)
 
     # 4. 组装全部向量（按 all_chunks 顺序）
+    #
+    # ⚠️ 建"hash → 行号"表必须按**旧 chunks 列表**的下标，不能拿"按 hash 去重后的字典"
+    # 去 enumerate：语料里只要有两段内容完全相同的片段（hash 相同），字典下标就与
+    # vectors.npz 的真实行号错开，**重复片段之后的每一行都会拿到邻居的向量**。
+    # 后果是静默的——向量整体只错位一两行，检索看着仍然正常、只是"永远差一点"，
+    # 直到第 19 周用严格判据（要求命中"含关键词的那一段"）才暴露出来。
+    # 详见台账 T29 与 tests/test_index.py 的同名回归测试。
     old_hash_to_row: dict[str, int] = {}
-    if old_vecs is not None:
-        for i, c in enumerate(old_by_hash.values()):
-            old_hash_to_row[c.hash] = i
-    new_hash_to_row = {c.hash: i for i, c in enumerate(new_chunks)}
+    for i, c in enumerate(old_chunks):
+        old_hash_to_row.setdefault(
+            c.hash, i
+        )  # 同文本重复出现时取首次行号（向量必然相同）
+    new_hash_to_row: dict[str, int] = {}
+    for i, c in enumerate(new_chunks):
+        new_hash_to_row.setdefault(c.hash, i)
     rows = []
     for c in all_chunks:
         if c.hash in old_hash_to_row:
@@ -177,7 +220,9 @@ def _cli() -> int:
     p_build = sub.add_parser("build", help="构建或增量更新索引")
     p_build.add_argument("--corpus", default="data/corpus")
     p_build.add_argument("--index", default="data/index")
-    p_build.add_argument("--backend", default="bge", choices=["bge", "none"])
+    p_build.add_argument(
+        "--backend", default="bge", choices=["bge", "fastembed", "none"]
+    )
     p_build.add_argument("--device", default="cuda")
     p_build.add_argument("--batch-size", type=int, default=32)
 

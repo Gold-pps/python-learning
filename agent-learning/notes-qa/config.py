@@ -11,6 +11,7 @@ from agents import (
     set_default_openai_client,
     set_tracing_disabled,
 )
+from constants import DEEPSEEK_BASE_URL, DEEPSEEK_MODEL
 from dotenv import load_dotenv
 from openai import AsyncOpenAI
 
@@ -20,7 +21,9 @@ AGENT_LEARNING_DIR = NOTES_QA_DIR.parent  # .../agent-learning
 NOTES_ROOT = AGENT_LEARNING_DIR  # 笔记根目录
 
 # ---- 统一模型名 ----
-MODEL = "deepseek-flash"
+# 真相来源在 constants.py：rag/rerank.py 要用同一个模型名，但它跑在 .venv-rag 里，
+# 不能 import 本模块（会把 openai-agents 拖进去，即 T18 那条依赖链）。
+MODEL = DEEPSEEK_MODEL
 
 # ---- 超时与重试 ----
 # 单次 HTTP 请求超时（秒）。SDK 默认 600 秒、重试 2 次，
@@ -45,7 +48,7 @@ if not api_key:
 # ---- 指向 DeepSeek 的三步配置 ----
 client = AsyncOpenAI(
     api_key=api_key,
-    base_url="https://api.deepseek.com",
+    base_url=DEEPSEEK_BASE_URL,
     timeout=REQUEST_TIMEOUT,
     max_retries=MAX_RETRIES,
 )

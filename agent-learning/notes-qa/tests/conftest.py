@@ -81,9 +81,15 @@ def _make_link(link: Path, target: Path, *, is_dir: bool) -> None:
         check=False,
         capture_output=True,
         text=True,
+        # PowerShell 的输出编码不一定等于本机 locale（路径里还带着中文），
+        # 解码失败会让读取线程抛 UnicodeDecodeError、stderr 直接变成 None，
+        # 于是下面那句 `stderr.strip()` 变成 AttributeError —— 本该 skip 的用例
+        # 报成 FAILED。这里显式给编码与 errors，把"环境不支持"稳定地降级为 skip。
+        encoding="utf-8",
+        errors="replace",
     )
     if created.returncode != 0:
-        pytest.skip(f"junction 创建失败：{created.stderr.strip()[:200]}")
+        pytest.skip(f"junction 创建失败：{(created.stderr or '').strip()[:200]}")
 
 
 @pytest.fixture

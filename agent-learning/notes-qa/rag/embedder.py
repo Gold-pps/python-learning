@@ -26,6 +26,7 @@ ONNX 只要零点几秒。GPU 的优势要在批量足够大时才体现。
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Literal
 
 import numpy as np
@@ -36,6 +37,13 @@ Backend = Literal["bge", "fastembed", "none"]
 # 保证切换后端时语义空间一致（向量值因数值精度略有差异，但可互检）。
 MODEL_NAME = "BAAI/bge-small-zh-v1.5"
 DIM = 512
+
+# fastembed 的模型缓存位置。**必须显式指定**：它的默认值走 `tempfile.gettempdir()`，
+# 而 Windows 上若 TMPDIR/TEMP/TMP 都取不到，`gettempdir()` 会静默回退到**当前工作目录**
+# —— 实测 90.8 MB 的 ONNX 模型直接落在 `notes-qa/fastembed_cache/`（与台账 T20 记录
+# 的 jieba 词典缓存是同一个根因、同一天踩到两次）。
+# 指到 `data/` 下（已 gitignore），位置确定，也不依赖任何环境变量。
+CACHE_DIR = Path(__file__).resolve().parents[1] / "data" / "fastembed_cache"
 
 
 class Embedder:
@@ -66,11 +74,11 @@ class Embedder:
 
             self._model = SentenceTransformer(MODEL_NAME, device=self.device)
         elif self.backend == "fastembed":
-            # 降级分支：ONNX + CPU，不依赖 torch。
-            # 本机（RTX 3050 + 15.7 GB）用不到，但为换机/分享保留。
+            # ONNX + CPU，不依赖 torch。第 17 周的实测把它从"降级方案"提成了常规选项
+            # （小批量下比 torch+CUDA 快得多，见 T19）。
             from fastembed import TextEmbedding
 
-            self._model = TextEmbedding(model_name=MODEL_NAME)
+            self._model = TextEmbedding(model_name=MODEL_NAME, cache_dir=str(CACHE_DIR))
         else:
             raise ValueError(f"未知后端：{self.backend!r}")
 

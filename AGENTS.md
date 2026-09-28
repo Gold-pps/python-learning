@@ -2,7 +2,7 @@
 
 本文件写给进入本仓库的 AI 助手（Codex 等）。开始工作前请先读这里。
 
-> 最后更新：2026-09-25（第 16、17 周完成：文档解析层 + 本地向量化；下一步第 18 周）
+> 最后更新：2026-09-28（第 18 周完成：混合检索 + 重排；下一步第 19 周，G2 验收周）
 
 ## 仓库是什么
 
@@ -18,8 +18,8 @@
 ## 当前进度
 
 - 第一阶段 12 周已完成（2026-09-13 收尾）；
-- 第二阶段进行中：**第 13~17 周已完成**（G1 已收口，G2 进行中），
-  当前在**第 18 周（混合检索 + 重排）**；
+- 第二阶段进行中：**第 13~18 周已完成**（G1 已收口，G2 进行中），
+  当前在**第 19 周（评测集与量化对比，G2 验收周）**；
 - 恢复上下文请先读 `agent-learning/学习进度.md`；
 - 计划与验收标准见 `agent-learning/第二阶段学习规划.md`；
 - 技术债台账见 `agent-learning/工程化改造记录.md`（T1~T19）。
@@ -64,7 +64,10 @@ python-learning/
 │       │   ├── parsers.py     .md / .txt / .pdf / .docx 解析
 │       │   ├── chunker.py     中文友好切分
 │       │   ├── embedder.py    双后端（bge / fastembed）
-│       │   └── index.py       构建 + 增量跳过 + CLI
+│       │   ├── index.py       构建 + 增量跳过 + CLI
+│       │   ├── retriever.py   混合检索（BM25 稀疏 + 向量稠密 + RRF）
+│       │   └── rerank.py      LLM 重排（严格 JSON + 失败降级 + 记账）
+│       ├── eval/              第 18 周起：抽查集 / 离线对比 / 对比记录
 │       ├── data/             语料与索引（不进 Git）
 │       └── tests/             pytest 用例 + conftest.py
 └── .venv/                     Python 虚拟环境（不提交）
@@ -82,13 +85,21 @@ uv sync                # 按 uv.lock 安装到 .venv（含 dev 组 pytest / ruff
 uv sync --no-dev       # 只要运行依赖
 
 # 测试与检查（仓库根）
-uv run pytest -q       # 46 passed
+uv run pytest -q       # 114 passed, 1 skipped（skip 是 Windows 非管理员平台限制）
 uv run ruff check .    # All checks passed
 # RAG 环境（独立 .venv-rag，需 torch；在 agent-learning/notes-qa 下）
 # Windows：
 & "..\..\.venv-rag\Scripts\python.exe" -m rag.index build
 # Linux / macOS：
 ../../.venv-rag/bin/python -m rag.index build
+
+# 混合检索 / 第 19 周四组离线对比（不花钱，同样用 .venv-rag）
+& "..\..\.venv-rag\Scripts\python.exe" -m rag.retriever --query "小批量为什么不用 GPU" --baseline
+& "..\..\.venv-rag\Scripts\python.exe" -m eval.rag_eval --out eval/第19周对比表.md
+# 回答级评测：引用准确率 / 无答案拒答率（**会花 token**，用户自己跑）
+& "..\..\.venv-rag\Scripts\python.exe" -m eval.rag_answer_eval --out eval/第19周回答级评测.md
+# LLM 重排（**会花 token**，由用户自己在低谷时段跑）
+& "..\..\.venv-rag\Scripts\python.exe" -m rag.rerank --query "..."
 
 # 项目：交互式问答
 cd agent-learning/notes-qa
