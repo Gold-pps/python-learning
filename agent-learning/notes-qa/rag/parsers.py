@@ -7,9 +7,10 @@
 - locator：人类可读位置（PDF 页码、docx 标题路径、md 标题路径）
 - start / end：机器可读位置（语义见 chunk.py）
 
-安全边界与 notes-qa 的既有工具保持一致：
+安全边界：
 - 只允许 .md / .txt / .pdf / .docx 四种后缀；
-- 单文件大小上限沿用 config.MAX_FILE_BYTES；
+- 单文件大小上限用 `MAX_PARSE_BYTES`（64 MiB），**不是**笔记工具那个 1 MiB——
+  两者防的不是一回事，见 constants.py 的说明（第 20 周实测：用 1 MiB 会挡掉 29/44 篇论文）；
 - 解析失败返回空列表（由调用方记入失败清单），不抛异常。
 """
 
@@ -18,7 +19,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from constants import MAX_FILE_BYTES
+from constants import MAX_PARSE_BYTES
 from docx import Document
 from pypdf import PdfReader
 
@@ -34,10 +35,14 @@ class ParsedBlock:
 
 
 def _check_size(path: Path) -> None:
-    """超过 MAX_FILE_BYTES 直接拒绝——与 read_note 的策略一致（报错，不静默跳过）。"""
+    """超过 MAX_PARSE_BYTES 直接拒绝——报错而不是静默跳过，让失败清单能说出原因。
+
+    阈值是 64 MiB 而不是笔记工具那个 1 MiB：这个上限只为"别把 GB 级文件读进内存"，
+    而 PDF 语料里"2 MB 的论文"是常态（见 constants.py 里两种上限的对比）。
+    """
     size = path.stat().st_size
-    if size > MAX_FILE_BYTES:
-        raise ValueError(f"文件超过 {MAX_FILE_BYTES} 字节：{path}（{size} 字节）")
+    if size > MAX_PARSE_BYTES:
+        raise ValueError(f"文件超过 {MAX_PARSE_BYTES} 字节：{path}（{size} 字节）")
 
 
 def parse_md(path: Path) -> list[ParsedBlock]:

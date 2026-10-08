@@ -9,7 +9,33 @@ from __future__ import annotations
 import pytest
 from docx import Document
 from fpdf import FPDF
+from rag import parsers
 from rag.parsers import parse_docx, parse_file, parse_md, parse_pdf, parse_txt
+
+
+def test_parse_accepts_files_larger_than_the_note_tool_limit(tmp_path):
+    """语料解析**不受**笔记工具那个 1 MiB 上限约束（第 20 周：它挡掉了 29/44 篇论文）。
+
+    PDF 语料里"2 MB 的期刊论文"是常态，而 1 MiB 是给 .md 笔记定的、防"文本塞爆上下文"的边界。
+    两种上限防的不是一回事，所以这里断言"1 MiB 以上的文本文件能正常解析"。
+    """
+    p = tmp_path / "big.txt"
+    p.write_text("这是一段会被切成很多片的内容。" * 80000, encoding="utf-8")  # ≈ 2.4 MB
+    assert p.stat().st_size > 1048576
+
+    blocks = parse_txt(p)
+
+    assert blocks and len("".join(b.text for b in blocks)) > 1048576
+
+
+def test_parse_rejects_file_over_the_parse_limit(tmp_path, monkeypatch):
+    """超过语料解析上限（默认 64 MiB）的文件要**报错**，好让失败清单说出原因。"""
+    monkeypatch.setattr(parsers, "MAX_PARSE_BYTES", 10)
+    p = tmp_path / "t.txt"
+    p.write_text("比十个字节长得多的一段文本", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="文件超过"):
+        parse_txt(p)
 
 
 def test_parse_md_keeps_title_path(tmp_path):

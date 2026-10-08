@@ -186,6 +186,152 @@ def test_rebuild_keeps_vectors_aligned_when_chunks_have_duplicate_text(
         )
 
 
+def test_build_force_full_re_encodes_everything(corpus_and_index):
+    """`--all` = 一键重建：即使索引已经是最新的，也要整体重算。
+
+    第 20 周的主命令靠它（语料大改之后要一份"从零构建"的干净结果），
+    有了它就不必再手工删 `data/index/*`（第 19 周 T29 就是那么重建的）。
+    """
+    corpus, index = corpus_and_index
+    _write(corpus, "a.md", "# T\n" + "这是一句话。" * 60 + "\n")
+    build(corpus, index, FakeEmbedder(), verbose=False)
+
+    r2 = build(corpus, index, FakeEmbedder(), verbose=False, force_full=True)
+
+    assert r2["chunks_new"] == r2["chunks_total"] > 0
+
+
+def test_build_returns_by_suffix_and_failures(corpus_and_index):
+    """建库报告要用到这两项：按格式的文件数、以及**可读的失败清单**。"""
+    corpus, index = corpus_and_index
+    _write(corpus, "a.md", "# T\n有效内容。\n")
+    _write(corpus, "b.txt", "纯文本内容。\n")
+    (corpus / "bad.pdf").write_bytes(b"not a real pdf")
+
+    r = build(corpus, index, FakeEmbedder(), verbose=False)
+
+    assert r["by_suffix"] == {"md": 1, "txt": 1}
+    assert len(r["failures"]) == 1
+    assert "bad.pdf" in r["failures"][0]  # 失败清单里要能看出是哪个文件
+
+
+def test_iter_skips_files_inside_hidden_directories(corpus_and_index):
+    """隐藏**目录**里的文件也要跳过——只判断文件名会漏（`corpus/.trash/x.pdf` 被收进来）。"""
+    corpus, index = corpus_and_index
+    _write(corpus, "ok.md", "# T\n内容。\n")
+    (corpus / ".trash").mkdir()  # _write 不建父目录，这里显式建
+    _write(corpus, ".trash/old.pdf", "not a real pdf")
+
+    r = build(corpus, index, FakeEmbedder(), verbose=False)
+
+    assert r["files"] == 1  # 隐藏目录里的那个不算文件
+    assert r["failures"] == []  # 也不该因为它而报解析失败
+
+
+def test_scan_reports_stats_and_failures(corpus_and_index):
+    from rag.index import scan
+
+    corpus, _ = corpus_and_index
+    _write(corpus, "a.md", "# T\n有效内容。\n")
+    _write(corpus, "b.txt", "纯文本内容。\n")
+    (corpus / "bad.pdf").write_bytes(b"not a real pdf")
+
+    r = scan(corpus)
+
+    assert r["files"] == 3
+    assert r["by_suffix"] == {"md": 1, "txt": 1}
+    assert len(r["failures"]) == 1 and "bad.pdf" in r["failures"][0]
+    assert r["chunks_total"] >= 2
+
+
+def test_scan_flags_documents_that_yield_no_text(corpus_and_index):
+    """解析成功、却一个片段都没有 —— 扫描版 PDF 的典型症状，预检要单独列出来。
+
+    `pypdf` 对图片型 PDF **不报错**，只是返回空字符串；不专门检查的话，
+    它会安静地变成"语料里少了这一篇"，而失败清单上什么都看不到。
+    """
+    from rag.index import scan
+
+    corpus, _ = corpus_and_index
+    _write(corpus, "ok.md", "# T\n有效内容。\n")
+    _write(corpus, "blank.md", "   \n\n   \n")
+
+    r = scan(corpus)
+
+    assert r["failures"] == []
+    assert r["empty"] == ["blank.md"]
+
+
+def test_scan_flags_garbled_text_layer(corpus_and_index):
+    """文字层是字形编号（缺 ToUnicode 映射）的文件要被单独标出来。
+
+    这类文件**解析不报错、片段也照常生成**，只有读正文才看得出是 `/G21/G22` 而不是文字
+    （第 20 周 44 篇真实资料里命中 1 篇，2010 年的期刊）。
+    """
+    from rag.index import scan
+
+    corpus, _ = corpus_and_index
+    _write(corpus, "ok.md", "# T\n正常的中文内容。\n")
+    line = " ".join(f"/G{n}" for n in range(21, 80))
+    _write(corpus, "garbled.txt", "\n\n".join([line] * 8) + "\n")
+
+    r = scan(corpus)
+
+    assert r["failures"] == []
+    assert len(r["suspect"]) == 1
+    assert "garbled.txt" in r["suspect"][0]
+
+
+def test_verify_passes_on_intact_index(corpus_and_index):
+    from rag.index import verify
+
+    corpus, index = corpus_and_index
+    _write(corpus, "a.md", "# T\n" + "这是一句话。" * 60 + "\n")
+    build(corpus, index, FakeEmbedder(), verbose=False)
+
+    result = verify(index, FakeEmbedder(), sample=4)
+
+    assert result["ok"] is True
+    assert result["checked"] >= 1
+    assert result["worst"] > 0.999
+
+
+def test_verify_detects_vector_misalignment(corpus_and_index):
+    """把 vectors 的行序颠倒（等价于 T29 那种错位），校验必须报**不通过**。
+
+    这条测试的价值在于：错位时检索结果看着仍然合理，只有"把向量与它自己的文本对一遍"
+    才看得出来——所以校验逻辑本身也要有回归测试，否则它坏了我们也不知道。
+    """
+    from rag.index import verify
+
+    corpus, index = corpus_and_index
+    _write(corpus, "a.md", "# T\n" + "这是一句话。" * 60 + "\n")
+    _write(corpus, "b.md", "# U\n" + "那是另一句。" * 60 + "\n")
+    build(corpus, index, FakeEmbedder(), verbose=False)
+
+    vectors = np.load(index / "vectors.npz")["vectors"]
+    np.savez(index / "vectors.npz", vectors=vectors[::-1])
+
+    assert verify(index, FakeEmbedder(), sample=2)["ok"] is False
+
+
+def test_build_report_contains_stats_failures_and_verify(tmp_path, corpus_and_index):
+    from rag.index import _write_build_report, verify
+
+    corpus, index = corpus_and_index
+    _write(corpus, "a.md", "# T\n内容。\n")
+    (corpus / "bad.pdf").write_bytes(b"not a real pdf")
+    result = build(corpus, index, FakeEmbedder(), verbose=False)
+
+    report = tmp_path / "报告" / "建库报告.md"
+    _write_build_report(report, result, verify(index, FakeEmbedder(), sample=1))
+
+    text = report.read_text(encoding="utf-8")
+    assert "建库报告" in text
+    assert "解析失败清单" in text and "bad.pdf" in text
+    assert "向量对齐校验" in text
+
+
 def test_fastembed_cache_dir_is_outside_working_directory():
     """fastembed 的模型缓存默认走 `tempfile.gettempdir()`，而 Windows 上它可能
     **静默回退到当前工作目录**——实测 90.8 MB 的 ONNX 模型落进了

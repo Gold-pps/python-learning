@@ -2,7 +2,7 @@
 
 本文件写给进入本仓库的 AI 助手（Codex 等）。开始工作前请先读这里。
 
-> 最后更新：2026-09-28（第 18 周完成：混合检索 + 重排；下一步第 19 周，G2 验收周）
+> 最后更新：2026-10-08（第 19、20 周完成：G2 达成 + 44 篇真实资料入库；下一步第 21 周，综述型问答）
 
 ## 仓库是什么
 
@@ -19,7 +19,7 @@
 
 - 第一阶段 12 周已完成（2026-09-13 收尾）；
 - 第二阶段进行中：**第 13~18 周已完成**（G1 已收口，G2 进行中），
-  当前在**第 19 周（评测集与量化对比，G2 验收周）**；
+  当前在**第 21 周（综述型问答：结构化输出，G3 进行中）**；
 - 恢复上下文请先读 `agent-learning/学习进度.md`；
 - 计划与验收标准见 `agent-learning/第二阶段学习规划.md`；
 - 技术债台账见 `agent-learning/工程化改造记录.md`（T1~T19）。
@@ -85,7 +85,7 @@ uv sync                # 按 uv.lock 安装到 .venv（含 dev 组 pytest / ruff
 uv sync --no-dev       # 只要运行依赖
 
 # 测试与检查（仓库根）
-uv run pytest -q       # 114 passed, 1 skipped（skip 是 Windows 非管理员平台限制）
+uv run pytest -q       # 138 passed, 1 skipped（skip 是 Windows 非管理员平台限制）
 uv run ruff check .    # All checks passed
 # RAG 环境（独立 .venv-rag，需 torch；在 agent-learning/notes-qa 下）
 # Windows：
@@ -93,11 +93,18 @@ uv run ruff check .    # All checks passed
 # Linux / macOS：
 ../../.venv-rag/bin/python -m rag.index build
 
+# 第 20 周：建库前先预检（只解析不编码，主 .venv 即可）
+uv run python -m rag.index scan
+# 一键全量重建 + 对齐校验 + 建库报告
+& "..\..\.venv-rag\Scripts\python.exe" -m rag.index build --backend fastembed --all --verify --report eval\建库报告.md
+# 索引健康检查（抽查向量对齐，防 T29 那类静默错位）
+& "..\..\.venv-rag\Scripts\python.exe" -m rag.index verify --sample 8
+
 # 混合检索 / 第 19 周四组离线对比（不花钱，同样用 .venv-rag）
 & "..\..\.venv-rag\Scripts\python.exe" -m rag.retriever --query "小批量为什么不用 GPU" --baseline
-& "..\..\.venv-rag\Scripts\python.exe" -m eval.rag_eval --out eval/第19周对比表.md
+& "..\..\.venv-rag\Scripts\python.exe" -m eval.rag_eval --index data/index-notes --out eval/第19周对比表.md
 # 回答级评测：引用准确率 / 无答案拒答率（**会花 token**，用户自己跑）
-& "..\..\.venv-rag\Scripts\python.exe" -m eval.rag_answer_eval --out eval/第19周回答级评测.md
+& "..\..\.venv-rag\Scripts\python.exe" -m eval.rag_answer_eval --index data/index-notes --out eval/第19周回答级评测.md
 # LLM 重排（**会花 token**，由用户自己在低谷时段跑）
 & "..\..\.venv-rag\Scripts\python.exe" -m rag.rerank --query "..."
 
