@@ -2,7 +2,7 @@
 
 本文件写给进入本仓库的 AI 助手（Codex 等）。开始工作前请先读这里。
 
-> 最后更新：2026-10-08（第 19、20 周完成：G2 达成 + 44 篇真实资料入库；下一步第 21 周，综述型问答）
+> 最后更新：2026-10-09（第 21 周完成：综述型问答四段式 + 可回查引用；下一步第 22 周，真实使用与打磨，G3 验收周）
 
 ## 仓库是什么
 
@@ -19,7 +19,7 @@
 
 - 第一阶段 12 周已完成（2026-09-13 收尾）；
 - 第二阶段进行中：**第 13~18 周已完成**（G1 已收口，G2 进行中），
-  当前在**第 21 周（综述型问答：结构化输出，G3 进行中）**；
+  当前在**第 22 周（真实使用与打磨，G3 验收周）**；
 - 恢复上下文请先读 `agent-learning/学习进度.md`；
 - 计划与验收标准见 `agent-learning/第二阶段学习规划.md`；
 - 技术债台账见 `agent-learning/工程化改造记录.md`（T1~T19）。
@@ -65,9 +65,10 @@ python-learning/
 │       │   ├── chunker.py     中文友好切分
 │       │   ├── embedder.py    双后端（bge / fastembed）
 │       │   ├── index.py       构建 + 增量跳过 + CLI
-│       │   ├── retriever.py   混合检索（BM25 稀疏 + 向量稠密 + RRF）
-│       │   └── rerank.py      LLM 重排（严格 JSON + 失败降级 + 记账）
-│       ├── eval/              第 18 周起：抽查集 / 离线对比 / 对比记录
+│       │   ├── retriever.py   混合检索（BM25 稀疏 + 向量稠密 + RRF + 每篇上限/子主题过滤）
+│       │   ├── rerank.py      LLM 重排（严格 JSON + 失败降级 + 记账）
+│       │   └── review_qa.py   综述问答（四段式 + JSON Output + 引用校验，第 21 周）
+│       ├── eval/              第 18 周起：抽查集 / 离线对比 / 建库报告 / 综述题与覆盖表
 │       ├── data/             语料与索引（不进 Git）
 │       └── tests/             pytest 用例 + conftest.py
 └── .venv/                     Python 虚拟环境（不提交）
@@ -85,7 +86,7 @@ uv sync                # 按 uv.lock 安装到 .venv（含 dev 组 pytest / ruff
 uv sync --no-dev       # 只要运行依赖
 
 # 测试与检查（仓库根）
-uv run pytest -q       # 138 passed, 1 skipped（skip 是 Windows 非管理员平台限制）
+uv run pytest -q       # 163 passed, 1 skipped（skip 是 Windows 非管理员平台限制）
 uv run ruff check .    # All checks passed
 # RAG 环境（独立 .venv-rag，需 torch；在 agent-learning/notes-qa 下）
 # Windows：
@@ -107,6 +108,10 @@ uv run python -m rag.index scan
 & "..\..\.venv-rag\Scripts\python.exe" -m eval.rag_answer_eval --index data/index-notes --out eval/第19周回答级评测.md
 # LLM 重排（**会花 token**，由用户自己在低谷时段跑）
 & "..\..\.venv-rag\Scripts\python.exe" -m rag.rerank --query "..."
+
+# 综述型问答（第 21 周；主 .venv 即可，需 `uv sync --extra rag`，不装 torch）
+uv run python -m eval.review_coverage --out eval/第21周检索冒烟.md   # 检索侧覆盖（离线、不花钱）
+uv run python -m rag.review_qa --query "刀具磨损监测有哪些主流方法？" --out eval/第21周综述问答.md  # **会花 token**
 
 # 项目：交互式问答
 cd agent-learning/notes-qa

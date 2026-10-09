@@ -18,10 +18,17 @@
 
 RRF 公式：`score(d) = Σ_channels 1 / (k + rank(d))`，rank 从 1 起算，k 默认 60。
 两路都召回的片段必然优于只被一路召回的片段，这正是"混合"的价值所在。
+
+4. **综述型问答需要两条额外约束**（第 21 周加，默认关闭所以第 18/19 周的数字不受影响）：
+   - `max_per_source`：同一篇文档最多贡献几条。一篇"研究进展"能同时命中小节标题与正文，
+     天然占满 top-5，答案会退化成"复述一篇"（实测：5 条里 3 条来自同一篇）；
+   - `subtopic`：只在某个子主题目录内检索。语料按 `子主题/文件名` 组织，索引用第一段路径
+     当子主题；实测"研究现状"这类词会把相邻子主题的综述也拉进来（T27 的同类问题）。
 """
 
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -43,6 +50,15 @@ CANDIDATE_POOL = 20  # 每个通道取多少条候选（也是送进 LLM 重排�
 # 写测试时才发现 cache 仍在仓库根）。所以这里显式指向项目自己的 `data/`（已 gitignore），
 # 位置确定，且不依赖任何环境变量。
 JIEBA_CACHE_FILE = Path(__file__).resolve().parents[1] / "data" / "jieba.cache"
+
+# 「仅存在性可检索」的源文件：文字层缺 ToUnicode 映射，抽出来是 `/G21/G22` 字形编号。
+# 清单与判定见 `rag/解析质量抽查.md` 第三节（使用者 2026-10-08 决定不换版本）。
+# 它们的片段能命中标题类关键词，却引用不出任何可读原文 —— 所以**默认从检索结果里排除**：
+# 只把这件事写在文档里，等于在答题时没人执行。
+KNOWN_UNREADABLE_SOURCES = (
+    "数字孪生与智能车间/数字孪生五维模型及十大领域应用_计算机集成制造系统2019.pdf",
+    "数控编程与轨迹规划/参数曲线的自适应实时前瞻插补算法_计算机集成制造系统2010.pdf",
+)
 
 _TOKEN_KEEP = re.compile(r"[0-9a-zA-Z\u4e00-\u9fff]")
 _jieba_ready = False
@@ -148,6 +164,16 @@ def _top_rows(scores: np.ndarray, limit: int) -> list[int]:
     return rows
 
 
+def subtopic_of(source_path: str) -> str:
+    """语料按 `子主题/文件名` 组织，第一段路径就是子主题；根目录下的文件归"（根目录）"。
+
+    提成模块函数是为了让评测脚本（`eval/review_coverage.py`）用**同一个**取法统计覆盖，
+    避免"检索按一种规则分桶、统计按另一种规则算"这种对不上的哑巴亏。
+    """
+    head, sep, _ = source_path.replace("\\", "/").partition("/")
+    return head if sep else "（根目录）"
+
+
 class Retriever:
     """混合检索器。`embedder` 为 None 时自动退化为纯 BM25（显式分支，不是兜底）。"""
 
@@ -188,6 +214,35 @@ class Retriever:
         vectors = np.load(index_dir / "vectors.npz")["vectors"]
         return cls(chunks, vectors, embedder, **kwargs)
 
+    # ---- 子主题（语料按 `子主题/文件名` 组织，第一段路径即子主题）----
+
+    def subtopics(self) -> dict[str, int]:
+        """`{子主题: 片段数}`，按片段数降序。CLI 用 `--list-subtopics` 看，也方便人工核对。"""
+        counts: dict[str, int] = {}
+        for chunk in self.chunks:
+            key = subtopic_of(chunk.source_path)
+            counts[key] = counts.get(key, 0) + 1
+        return dict(sorted(counts.items(), key=lambda kv: (-kv[1], kv[0])))
+
+    def unreadable_rows(self) -> set[int]:
+        """「仅存在性可检索」的源文件占了哪些行（见 `KNOWN_UNREADABLE_SOURCES`）。"""
+        return {
+            row
+            for row, chunk in enumerate(self.chunks)
+            if chunk.source_path in KNOWN_UNREADABLE_SOURCES
+        }
+
+    def _rows_for_subtopic(self, subtopic: str | None) -> set[int] | None:
+        """返回允许参与排名的行号集合；`None` 表示"不过滤"。"""
+        if subtopic is None:
+            return None
+        want = subtopic.strip().casefold()
+        return {
+            row
+            for row, chunk in enumerate(self.chunks)
+            if subtopic_of(chunk.source_path).casefold() == want
+        }
+
     # ---- 两个通道 ----
 
     def _bm25_index(self):
@@ -207,15 +262,31 @@ class Retriever:
             self._inverted = inverted
         return self._bm25
 
-    def dense_ranking(self, query: str, limit: int) -> list[tuple[int, float]]:
-        """稠密通道：查询向量与所有片段向量做点积（等价余弦，向量已归一化）。"""
+    def dense_ranking(
+        self, query: str, limit: int, *, allowed: set[int] | None = None
+    ) -> list[tuple[int, float]]:
+        """稠密通道：查询向量与所有片段向量做点积（等价余弦，向量已归一化）。
+
+        `allowed` 非空时只在给定行号里取前 limit 条。**必须先筛行再取前 limit**：
+        若先取 limit 再筛，20 个候选可能全落在别的子主题里，筛完就空手而归。
+        """
         if self.embedder is None or self.vectors.shape[0] == 0:
             return []
         query_vec = np.asarray(self.embedder.encode([query])[0], dtype=np.float32)
         scores = self.vectors @ query_vec
-        return [(row, float(scores[row])) for row in _top_rows(scores, limit)]
+        if allowed is None:
+            return [(row, float(scores[row])) for row in _top_rows(scores, limit)]
+        if not allowed:
+            return []
+        rows_allowed = np.fromiter(sorted(allowed), dtype=np.int64, count=len(allowed))
+        subset = scores[rows_allowed]
+        return [
+            (int(rows_allowed[i]), float(subset[i])) for i in _top_rows(subset, limit)
+        ]
 
-    def sparse_ranking(self, query: str, limit: int) -> list[tuple[int, float]]:
+    def sparse_ranking(
+        self, query: str, limit: int, *, allowed: set[int] | None = None
+    ) -> list[tuple[int, float]]:
         """稀疏通道：BM25。查询分词为空时返回空（不是返回随机结果）。
 
         「命中」的判定用**倒排表**，绝不能用「BM25 分数是否为 0」：
@@ -233,6 +304,8 @@ class Retriever:
         matched: set[int] = set()
         for token in tokens:
             matched |= self._inverted.get(token, set())
+        if allowed is not None:
+            matched &= allowed  # 命中判定仍走倒排表，只是把范围收窄到指定行
         if not matched:
             return []
         scores = np.asarray(bm25.get_scores(tokens), dtype=np.float64)
@@ -251,14 +324,37 @@ class Retriever:
         candidates: int | None = None,
         use_dense: bool = True,
         use_sparse: bool = True,
+        max_per_source: int | None = None,
+        subtopic: str | None = None,
+        exclude_unreadable: bool = True,
     ) -> list[SearchHit]:
-        """混合检索。返回按融合分降序的 `SearchHit` 列表。"""
+        """混合检索。返回按融合分降序的 `SearchHit` 列表。
+
+        `max_per_source`：同一篇文档最多贡献几条（`None` = 不限，第 18/19 周的口径）。
+        综述型问答建议设 2，否则单篇综述霸榜（理由见模块 docstring 第 4 条）。
+        `subtopic`：只在该子主题内检索；不存在的子主题返回空列表（不是"退回全库"——
+        静默放宽范围会让"我只想在这批资料里找"变成一句空话）。
+        `exclude_unreadable`：默认排除 `KNOWN_UNREADABLE_SOURCES`（那 2 篇 `/G` 乱码论文），
+        它们能凭标题命中却引用不出可读原文。要复现"含它们"的检索再加 `False`。
+        """
         if not isinstance(query, str) or not query.strip() or top_k <= 0:
             return []
         pool = self.candidate_pool if candidates is None else candidates
+        allowed = self._rows_for_subtopic(subtopic)
+        if exclude_unreadable:
+            banned = self.unreadable_rows()
+            if banned:
+                # allowed 为 None 表示"不过滤"，这里要变成"除了不该引用的那些，都允许"
+                allowed = (
+                    set(range(len(self.chunks))) - banned
+                    if allowed is None
+                    else allowed - banned
+                )
+        if allowed is not None and not allowed:
+            return []
 
-        dense = self.dense_ranking(query, pool) if use_dense else []
-        sparse = self.sparse_ranking(query, pool) if use_sparse else []
+        dense = self.dense_ranking(query, pool, allowed=allowed) if use_dense else []
+        sparse = self.sparse_ranking(query, pool, allowed=allowed) if use_sparse else []
         if not dense and not sparse:
             return []
 
@@ -283,17 +379,27 @@ class Retriever:
                 r,
             ),
         )
-        return [
-            SearchHit(
-                chunk=self.chunks[row],
-                score=fused[row],
-                dense_rank=dense_ranks.get(row),
-                dense_score=dense_scores.get(row),
-                sparse_rank=sparse_ranks.get(row),
-                sparse_score=sparse_scores.get(row),
+        hits: list[SearchHit] = []
+        per_source: dict[str, int] = {}
+        for row in rows:
+            if max_per_source is not None:
+                source = self.chunks[row].source_path
+                if per_source.get(source, 0) >= max_per_source:
+                    continue  # 这篇已经贡献够了，继续往下找别的文档
+                per_source[source] = per_source.get(source, 0) + 1
+            hits.append(
+                SearchHit(
+                    chunk=self.chunks[row],
+                    score=fused[row],
+                    dense_rank=dense_ranks.get(row),
+                    dense_score=dense_scores.get(row),
+                    sparse_rank=sparse_ranks.get(row),
+                    sparse_score=sparse_scores.get(row),
+                )
             )
-            for row in rows[:top_k]
-        ]
+            if len(hits) >= top_k:
+                break
+        return hits
 
 
 def keyword_baseline_search(
@@ -352,11 +458,12 @@ def format_hits(hits: list[SearchHit], *, snippet_chars: int = 60) -> str:
 
 
 # ---------------------------------------------------------------------------
-# CLI：python -m rag.retriever --query "..." [--top-k 5] [--no-dense]
+# CLI：python -m rag.retriever --query "..." [--top-k 5] [--max-per-source 2]
 #
-# 有稠密通道时需要在 .venv-rag 里跑（要 torch / onnxruntime）：
-#   & "..\..\.venv-rag\Scripts\python.exe" -m rag.retriever --query "小批量为什么不用 GPU"
-# 只要 BM25 时主 .venv 也能跑：--no-dense
+# 主 .venv 装了 `rag` 可选依赖组（fastembed，ONNX+CPU，**不含 torch**）后可直接跑：
+#   uv run python -m rag.retriever --query "刀具磨损监测有哪些主流方法"
+# 只有要用 bge（torch+CUDA）时才需要 .venv-rag：
+#   & "..\..\.venv-rag\Scripts\python.exe" -m rag.retriever --query "..." --backend bge
 # ---------------------------------------------------------------------------
 
 
@@ -364,36 +471,65 @@ def _cli() -> int:
     import argparse
 
     parser = argparse.ArgumentParser(description="混合检索（BM25 + 向量 + RRF）")
-    parser.add_argument("--query", required=True)
+    parser.add_argument("--query", default="")
     parser.add_argument("--index", default="data/index")
     parser.add_argument("--top-k", type=int, default=DEFAULT_TOP_K)
     parser.add_argument("--candidates", type=int, default=CANDIDATE_POOL)
     parser.add_argument(
-        "--no-dense", action="store_true", help="只用 BM25（主环境可直接跑）"
+        "--no-dense", action="store_true", help="只用 BM25（纯 Python，最省）"
     )
     parser.add_argument("--no-sparse", action="store_true", help="只用向量")
     parser.add_argument(
         "--baseline", action="store_true", help="追加第一阶段的关键词基线结果"
     )
+    parser.add_argument(
+        "--max-per-source",
+        type=int,
+        default=None,
+        help="同一篇文档最多返回几条（综述型问题建议 2）",
+    )
+    parser.add_argument("--subtopic", default=None, help="只在该子主题目录内检索")
+    parser.add_argument(
+        "--include-unreadable",
+        action="store_true",
+        help="不排除那 2 篇 /G 乱码论文（默认排除，见 KNOWN_UNREADABLE_SOURCES）",
+    )
+    parser.add_argument(
+        "--list-subtopics", action="store_true", help="列出子主题与片段数后退出"
+    )
+    parser.add_argument("--json", action="store_true", help="以 JSON 输出（机读）")
     parser.add_argument("--backend", default="fastembed", choices=["bge", "fastembed"])
     parser.add_argument("--device", default="cuda")
     args = parser.parse_args()
     make_stdout_forgiving()
+    if not args.query and not args.list_subtopics:
+        parser.error("需要 --query（或用 --list-subtopics 只看语料结构）")
 
     embedder = None
     if not args.no_dense:
-        from .embedder import Embedder  # 延迟导入：主环境没 torch 也能走 --no-dense
+        from .embedder import Embedder  # 延迟导入：用 bge 时才需要 torch
 
         embedder = Embedder(backend=args.backend, device=args.device)
 
     retriever = Retriever.from_index(args.index, embedder)
+    if args.list_subtopics:
+        print(json.dumps(retriever.subtopics(), ensure_ascii=False, indent=2))
+        return 0
+
     hits = retriever.search(
         args.query,
         args.top_k,
         candidates=args.candidates,
         use_dense=not args.no_dense,
         use_sparse=not args.no_sparse,
+        max_per_source=args.max_per_source,
+        subtopic=args.subtopic,
+        exclude_unreadable=not args.include_unreadable,
     )
+    if args.json:
+        print(json.dumps([h.to_dict() for h in hits], ensure_ascii=False, indent=2))
+        return 0
+
     print(f"[混合检索] {args.query}")
     print(format_hits(hits))
     if args.baseline:

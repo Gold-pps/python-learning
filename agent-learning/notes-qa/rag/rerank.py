@@ -216,12 +216,16 @@ def chat(
     *,
     max_tokens: int = RERANK_MAX_TOKENS,
     json_mode: bool = False,
+    model: str | None = None,
 ) -> tuple[str, dict]:
     """一次最小化调用：返回 `(回复文本, usage)`。
 
-    重排（本模块）与回答级评测（`eval/rag_answer_eval.py`）都走这里——
-    客户端构造与 usage 摊平只写一份，`finish_reason` 也一定带回来
+    重排（本模块）、综述问答（`rag/review_qa.py`）与回答级评测（`eval/rag_answer_eval.py`）
+    都走这里——客户端构造与 usage 摊平只写一份，`finish_reason` 也一定带回来
     （它是区分"被 max_tokens 截断"与"模型没按格式回"的唯一证据，见台账 T26）。
+
+    `model` 留给思考模式（综述型问题才开）。**默认不传，不去猜模型名**：
+    名字以 DeepSeek 控制台为准，由调用方显式给出（第 21 周）。
     """
     from constants import DEEPSEEK_MODEL
 
@@ -229,7 +233,7 @@ def chat(
     if json_mode:
         extra["response_format"] = {"type": "json_object"}
     response = _get_client().chat.completions.create(
-        model=DEEPSEEK_MODEL,
+        model=model or DEEPSEEK_MODEL,
         messages=[{"role": "user", "content": prompt}],
         temperature=0,
         max_tokens=max_tokens,

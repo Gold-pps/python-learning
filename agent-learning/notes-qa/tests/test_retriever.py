@@ -318,3 +318,110 @@ def test_search_hit_to_dict_keeps_both_channels():
     assert data["channels"] == "dense+sparse"
     assert data["locator"] == "2.4 双后端"
     assert data["sparse_score"] == pytest.approx(-0.13)
+
+
+# ---- 综述型问答的两条约束（第 21 周加）----
+
+
+def test_max_per_source_caps_one_document_but_keeps_diversity():
+    """不设上限时同一篇会占满 top-5（实测：5 条里 3 条来自同一篇综述）。
+
+    构造：a.md 三段都命中 alpha 且稠密分最高，b.md / c.md 各一段。
+    """
+    corpus = [
+        ("a.md", "alpha one"),
+        ("a.md", "alpha two"),
+        ("a.md", "alpha three"),
+        ("b.md", "alpha beta"),
+        ("c.md", "alpha gamma"),
+    ]
+    vectors = [
+        [1.0, 0.0, 0.0, 0.0],
+        [0.99, 0.0, 0.0, 0.0],
+        [0.98, 0.0, 0.0, 0.0],
+        [0.5, 0.5, 0.0, 0.0],
+        [0.5, 0.0, 0.5, 0.0],
+    ]
+    retriever = _make_retriever(corpus, vectors, {"alpha": [1.0, 0.0, 0.0, 0.0]})
+
+    unlimited = retriever.search("alpha", top_k=3)
+    capped = retriever.search("alpha", top_k=3, max_per_source=1)
+
+    assert [h.chunk.source_path for h in unlimited] == ["a.md", "a.md", "a.md"]
+    assert [h.chunk.source_path for h in capped] == ["a.md", "b.md", "c.md"]
+
+
+def test_max_per_source_returns_fewer_hits_when_documents_run_out():
+    """上限生效时可能凑不满 top_k，**这是正确的**：宁可少给几条，
+    也不要为了凑数把同一篇的第二段塞回来——综述层要按"实际找到几篇"来引用。"""
+    corpus = [("a.md", "alpha one"), ("a.md", "alpha two"), ("b.md", "alpha three")]
+    vectors = [[1.0, 0.0, 0.0, 0.0], [0.9, 0.0, 0.0, 0.0], [0.5, 0.0, 0.0, 0.0]]
+    retriever = _make_retriever(corpus, vectors, {"alpha": [1.0, 0.0, 0.0, 0.0]})
+
+    hits = retriever.search("alpha", top_k=5, max_per_source=1)
+
+    assert [h.chunk.source_path for h in hits] == ["a.md", "b.md"]
+
+
+def test_subtopic_filters_rows_before_ranking():
+    """串台实测："研究现状"这类词会把相邻子主题的综述也拉进来，所以要能按子主题收窄。"""
+    corpus = [
+        ("刀具磨损监测/综述.pdf", "alpha 方法对比"),
+        ("数字孪生与智能车间/综述.pdf", "alpha 研究现状"),
+    ]
+    vectors = [[1.0, 0.0, 0.0, 0.0], [0.9, 0.0, 0.0, 0.0]]
+    retriever = _make_retriever(corpus, vectors, {"alpha": [1.0, 0.0, 0.0, 0.0]})
+
+    both = retriever.search("alpha", top_k=5)
+    only = retriever.search("alpha", top_k=5, subtopic="数字孪生与智能车间")
+
+    assert [h.chunk.source_path for h in both] == [
+        "刀具磨损监测/综述.pdf",
+        "数字孪生与智能车间/综述.pdf",
+    ]
+    assert [h.chunk.source_path for h in only] == ["数字孪生与智能车间/综述.pdf"]
+
+
+def test_subtopic_unknown_returns_empty_not_whole_corpus():
+    """子主题写错时返回空，**不静默退回全库**——否则"只在这批资料里找"就成了一句空话。"""
+    corpus = [("刀具磨损监测/a.pdf", "alpha")]
+    retriever = _make_retriever(corpus, np.eye(1, 4, dtype=np.float32), {})
+
+    assert retriever.search("alpha", subtopic="不存在的子主题") == []
+
+
+def test_unreadable_sources_are_excluded_by_default():
+    """那 2 篇「仅存在性可检索」的论文（文字层是 `/G` 字形编号）默认不进结果。
+
+    "只写在文档里"等于答题时没人执行，所以约束落在检索层，并留 `exclude_unreadable=False`
+    这条复现路径。
+    """
+    bad = R.KNOWN_UNREADABLE_SOURCES[0]
+    corpus = [(bad, "alpha 数字孪生"), ("刀具磨损监测/好论文.pdf", "alpha 刀磨损")]
+    vectors = [[1.0, 0.0, 0.0, 0.0], [0.5, 0.0, 0.0, 0.0]]
+    retriever = _make_retriever(corpus, vectors, {"alpha": [1.0, 0.0, 0.0, 0.0]})
+
+    default_hits = retriever.search("alpha", top_k=5)
+    with_bad = retriever.search("alpha", top_k=5, exclude_unreadable=False)
+
+    assert [h.chunk.source_path for h in default_hits] == ["刀具磨损监测/好论文.pdf"]
+    assert [h.chunk.source_path for h in with_bad] == [
+        bad,
+        "刀具磨损监测/好论文.pdf",
+    ]
+    assert len(retriever.unreadable_rows()) == 1
+
+
+def test_subtopics_counts_chunks_and_marks_root_files():
+    corpus = [
+        ("刀具磨损监测/a.pdf", "alpha"),
+        ("刀具磨损监测/b.pdf", "beta"),
+        ("note.md", "gamma"),
+    ]
+    retriever = Retriever(
+        [make_chunk(name, text) for name, text in corpus],
+        np.zeros((3, 4), dtype=np.float32),
+        None,
+    )
+
+    assert retriever.subtopics() == {"刀具磨损监测": 2, "（根目录）": 1}
