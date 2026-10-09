@@ -2,7 +2,7 @@
 
 本文件写给进入本仓库的 AI 助手（Codex 等）。开始工作前请先读这里。
 
-> 最后更新：2026-10-09（第 21 周完成：综述型问答四段式 + 可回查引用；下一步第 22 周，真实使用与打磨，G3 验收周）
+> 最后更新：2026-10-09（第 22 周完成：真实使用 + G3 五条达成；下一步第 23 周，对外可用（Web 界面），G4）
 
 ## 仓库是什么
 
@@ -19,7 +19,7 @@
 
 - 第一阶段 12 周已完成（2026-09-13 收尾）；
 - 第二阶段进行中：**第 13~18 周已完成**（G1 已收口，G2 进行中），
-  当前在**第 22 周（真实使用与打磨，G3 验收周）**；
+  当前在**第 23 周（对外可用：Web 界面，G4）**；
 - 恢复上下文请先读 `agent-learning/学习进度.md`；
 - 计划与验收标准见 `agent-learning/第二阶段学习规划.md`；
 - 技术债台账见 `agent-learning/工程化改造记录.md`（T1~T19）。
@@ -111,7 +111,7 @@ uv run python -m rag.index scan
 
 # 综述型问答（第 21 周；主 .venv 即可，需 `uv sync --extra rag`，不装 torch）
 uv run python -m eval.review_coverage --out eval/第21周检索冒烟.md   # 检索侧覆盖（离线、不花钱）
-uv run python -m rag.review_qa --query "刀具磨损监测有哪些主流方法？" --out eval/第21周综述问答.md  # **会花 token**
+uv run python -m rag.review_qa --query "刀具磨损监测有哪些主流方法？" --out eval/第21周综述问答.md --log data/usage_log.jsonl  # **会花 token**（日志进 data/，不进 Git）
 
 # 项目：交互式问答
 cd agent-learning/notes-qa

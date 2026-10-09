@@ -21,7 +21,9 @@ from rag.review_qa import (
     ReviewResult,
     _render,
     answer_review,
+    append_log,
     build_candidates_block,
+    build_log_record,
     citation_of,
     parse_answer,
     parse_plan,
@@ -307,6 +309,17 @@ def test_answer_prompt_bounds_output_length():
     assert "最多挂 2 个引用" in ANSWER_PROMPT
 
 
+def test_answer_prompt_requires_context_fidelity():
+    """语境保真：第 22 周真跑后发现的风险不是"抄错数"，而是"搬了参数、丢了语境"。
+
+    - `S=60 r/min` 数值完全正确，但那是**超精密慢刀伺服**的转速，拿去常规车削会出事故；
+    - "智能体"在强化学习论文里指调度用 RL agent，与"大语言模型智能体"不是一回事。
+    两种都属于"引用回查能过、但读者会误用"，所以要求写进提示词。
+    """
+    assert "适用语境" in ANSWER_PROMPT
+    assert "不同义" in ANSWER_PROMPT
+
+
 def test_answer_invalid_json_degrades_with_head_of_reply():
     retriever = FakeRetriever(fallback=[make_hit("刀具/综述.pdf", "内容")])
 
@@ -399,3 +412,51 @@ def test_render_includes_sections_citations_and_invented_list():
     assert "编造（候选里没有）：1" in report
     assert "刀具/a.pdf" in report  # 候选清单进报告，人工核对用
     assert "第 1 次（answer）" in report  # 每次调用的 usage 要能看到
+
+
+# ---- 使用日志（第 22 周 G3 的"使用记录"）----
+
+
+def test_build_log_record_leaves_adoption_to_human():
+    """自动字段机器填，"有没有帮上忙"必须留给人填——G3 要的正是这两个字段。"""
+    hits = [make_hit("刀具/a.pdf", "内容")]
+    result = ReviewResult(
+        question="有哪些方法",
+        payload={
+            **{key: [] for key in REVIEW_SECTIONS},
+            "insufficient": False,
+            "note": "",
+        },
+        candidates=hits,
+        calls=[dict(USAGE, stage="answer")],
+        reason="ok",
+        citation_exact=1,
+    )
+
+    record = build_log_record(
+        result,
+        index="data/index",
+        top_k=5,
+        elapsed_s=12.34,
+        ts="2026-10-09T12:00:00+08:00",
+    )
+
+    assert record["ts"] == "2026-10-09T12:00:00+08:00"
+    assert record["question"] == "有哪些方法"
+    assert record["prompt_tokens"] == 100
+    assert record["completion_tokens"] == 50
+    assert record["elapsed_s"] == 12.34
+    assert record["citation_exact"] == 1
+    assert record["adopted"] is None
+    assert record["note"] == ""
+
+
+def test_append_log_appends_jsonl(tmp_path):
+    """追加而不是覆盖：使用日志的价值就在"累积"。"""
+    path = tmp_path / "usage_log.jsonl"
+
+    append_log(path, {"a": 1})
+    append_log(path, {"a": 2})
+
+    lines = path.read_text(encoding="utf-8").splitlines()
+    assert [json.loads(line)["a"] for line in lines] == [1, 2]

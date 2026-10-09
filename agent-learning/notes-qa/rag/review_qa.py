@@ -32,6 +32,8 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
+from datetime import datetime
+from pathlib import Path
 
 from .retriever import DEFAULT_TOP_K, Retriever, SearchHit
 
@@ -95,7 +97,12 @@ PLAN_PROMPT = """你是资料检索的"缺口盘点员"。只做一件事：判�
 ANSWER_PROMPT = """你是科研资料综述助手。依据给定的候选片段，把用户问题的答案组织成四段。
 
 规则：
-1. **只使用候选片段里的内容**，不许引入片段以外的知识；片段之间结论冲突时如实并列，不要替它们调和；
+1. **只使用候选片段里的内容**，不许引入片段以外的知识；片段之间结论冲突时如实并列，不要替它们调和。
+   两条保真要求（第 22 周真跑后加的，见台账 T35）：
+   - 引用**具体数值、参数或做法**时，必须带上原文的适用语境（材料 / 机床 / 工况；
+     例如"超精密慢刀伺服车削"与常规车削不是一回事）——脱离语境搬参数会误导读者；
+   - 若候选里的术语与问题里的术语可能**不同义**（例如"智能体"在强化学习语境下指调度用的 RL 智能体，
+     与"大语言模型智能体"不是一回事），必须显式说明差异，**不得当成同一概念直接回答**；
 2. 四段的键名固定：`研究现状`、`方法对比`、`结论`、`可复用点`，每段是一个数组：
    - `研究现状` / `结论` / `可复用点`：元素为 {{"point": "一句话结论", "citations": ["文件:位置", ...]}}；
    - `方法对比`：元素为 {{"method": "方法名", "pros": "优点", "cons": "局限", "citations": [...]}}；
@@ -486,17 +493,70 @@ def answer_review(
     return result
 
 
+# ---- 使用日志（第 22 周 G3 验收要的"使用记录"）----
+
+
+def build_log_record(
+    result: ReviewResult,
+    *,
+    index: str,
+    top_k: int,
+    elapsed_s: float,
+    ts: str | None = None,
+) -> dict:
+    """一次运行的机读记录：**自动字段 + 两个只能由人填的字段**。
+
+    `adopted` / `note` 故意留空（`None` / `""`）："这次答案帮上忙还是帮倒忙"
+    只有使用者知道。G3 验收要的正是这两个字段，所以**机器不替人下结论**——
+    日志里那两格空着，就是提醒"还没评过"。
+    """
+    calls = result.calls
+    return {
+        "ts": ts or datetime.now().astimezone().isoformat(timespec="seconds"),
+        "question": result.question,
+        "index": index,
+        "top_k": top_k,
+        "candidates": len(result.candidates),
+        "calls": len(calls),
+        "prompt_tokens": sum(c.get("prompt_tokens") or 0 for c in calls),
+        "completion_tokens": sum(c.get("completion_tokens") or 0 for c in calls),
+        "cached_tokens": sum(c.get("cached_tokens") or 0 for c in calls),
+        "elapsed_s": round(elapsed_s, 2),
+        "degraded": result.degraded,
+        "reason": result.reason,
+        "plan_reason": result.plan_reason,
+        "citation_exact": result.citation_exact,
+        "citation_partial": result.citation_partial,
+        "citation_invalid": result.citation_invalid,
+        "uncited_points": result.uncited_points,
+        "thinking_recommended": result.thinking_recommended,
+        "adopted": None,  # 使用者的评价：true / false
+        "note": "",  # 为什么帮上忙 / 帮倒忙
+    }
+
+
+def append_log(path: str | Path, record: dict) -> None:
+    """追加一行 JSON（JSONL）。**追加而不是覆盖**：使用日志的价值就在于"累积"。"""
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with target.open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(record, ensure_ascii=False) + "\n")
+
+
 # ---------------------------------------------------------------------------
 # CLI（**会花 token**，由使用者在低谷时段跑）：
 #   uv run python -m rag.review_qa --query "刀具磨损监测有哪些主流方法？" --out eval\第21周综述问答.md
 # ---------------------------------------------------------------------------
 
 
-def _render(result: ReviewResult, index: str, top_k: int) -> str:
+def _render(
+    result: ReviewResult, index: str, top_k: int, elapsed_s: float | None = None
+) -> str:
     calls = len(result.calls)
     prompt_tokens = sum(c.get("prompt_tokens") or 0 for c in result.calls)
     completion_tokens = sum(c.get("completion_tokens") or 0 for c in result.calls)
     cached = sum(c.get("cached_tokens") or 0 for c in result.calls)
+    elapsed_text = "（未计时）" if elapsed_s is None else f"{elapsed_s:.1f}s"
     lines = [
         "# 第 21 周综述型问答",
         "",
@@ -507,6 +567,7 @@ def _render(result: ReviewResult, index: str, top_k: int) -> str:
             f" / 缓存命中 {cached}"
         ),
         f"> 降级：{result.degraded}｜原因：{result.reason}",
+        f"> 耗时：{elapsed_text}",
         (
             f"> 盘点：{result.plan_reason or '（未启用多跳）'}"
             f"｜思考模式判据命中：{result.thinking_recommended}"
@@ -567,8 +628,8 @@ def _render(result: ReviewResult, index: str, top_k: int) -> str:
 
 def _cli() -> int:
     import argparse
+    import time
     from functools import partial
-    from pathlib import Path
 
     parser = argparse.ArgumentParser(description="综述型问答（四段式 + 可回查引用）")
     parser.add_argument("--query", required=True)
@@ -590,6 +651,11 @@ def _cli() -> int:
         help="回答阶段的输出上限（**思考 + 答案一起算**；被截断 = 这次调用白花钱）",
     )
     parser.add_argument("--out", default="")
+    parser.add_argument(
+        "--log",
+        default="",
+        help="把本次运行追加进 JSONL 使用日志（第 22 周 G3 的“使用记录”）",
+    )
     parser.add_argument("--json", action="store_true", help="额外打印 JSON 结果")
     args = parser.parse_args()
 
@@ -598,6 +664,7 @@ def _cli() -> int:
 
     make_stdout_forgiving()
     retriever = Retriever.from_index(args.index, Embedder(backend="fastembed"))
+    started = time.perf_counter()
     result = answer_review(
         args.query,
         retriever,
@@ -607,7 +674,8 @@ def _cli() -> int:
         thinking_model=args.thinking_model,
         answer_call=partial(default_answer_call, max_tokens=args.max_tokens),
     )
-    report = _render(result, args.index, args.top_k)
+    elapsed = time.perf_counter() - started
+    report = _render(result, args.index, args.top_k, elapsed)
     print(report)
     if args.json:
         print(json.dumps(result.payload, ensure_ascii=False, indent=2))
@@ -616,6 +684,14 @@ def _cli() -> int:
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(report + "\n", encoding="utf-8")
         print(f"[综述] 报告写入 {out}")
+    if args.log:
+        append_log(
+            args.log,
+            build_log_record(
+                result, index=args.index, top_k=args.top_k, elapsed_s=elapsed
+            ),
+        )
+        print(f"[综述] 使用日志追加到 {args.log}")
     return 0 if not result.degraded else 1
 
 

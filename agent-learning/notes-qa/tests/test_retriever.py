@@ -412,6 +412,72 @@ def test_unreadable_sources_are_excluded_by_default():
     assert len(retriever.unreadable_rows()) == 1
 
 
+def test_reference_chunks_are_excluded_by_default():
+    """参考文献列表段默认不进候选池（第 22 周实测被当候选两次）。
+
+    它们没有正文内容，却因为"书目信息语义上跟很多查询都像"而拿到高分——
+    所以约束落在检索层，并留 `exclude_references=False` 的复现路径。
+    """
+    bibliography = (
+        "[1] CAI W, LIU F. Energy allowance[J]. Energy, 2016, 114: 623-633. "
+        "[2] CHEN X Z. Cutting parameter optimization[J]. FME, 2021, 16(2): 221-248. "
+        "[3] DIAZ N. Environmental impact[J]. Procedia CIRP, 2012, 1: 518-523. "
+        "[4] HE Y. Energy consumption analysis[J]. Proc IMechE, 2012."
+    )
+    corpus = [("刀具/某篇.pdf", bibliography), ("刀具/综述.pdf", "alpha 正文内容")]
+    vectors = [[1.0, 0.0, 0.0, 0.0], [0.5, 0.0, 0.0, 0.0]]
+    retriever = _make_retriever(corpus, vectors, {"alpha": [1.0, 0.0, 0.0, 0.0]})
+
+    default_hits = retriever.search("alpha", top_k=5)
+    with_refs = retriever.search("alpha", top_k=5, exclude_references=False)
+
+    assert [h.chunk.source_path for h in default_hits] == ["刀具/综述.pdf"]
+    assert {h.chunk.source_path for h in with_refs} == {
+        "刀具/某篇.pdf",
+        "刀具/综述.pdf",
+    }
+    assert len(retriever.reference_rows()) == 1
+
+
+def test_reference_page_majority_marks_the_whole_page():
+    """文献表常被切碎（实测某页 10 个片段，每个只剩 1~2 条书目特征）→ 页级多数表决补齐。
+
+    同一 `(source_path, locator)` 下**过半**片段被标记时，整页按参考文献处理；
+    只有一两条时不补（避免把"正文末尾接文献表"的页整页误伤）。
+    """
+    bibliography = (
+        "[1] CAI W, LIU F. Energy allowance[J]. Energy, 2016, 114: 623-633. "
+        "[2] CHEN X Z. Cutting parameter optimization[J]. FME, 2021, 16(2): 221-248. "
+        "[3] DIAZ N. Environmental impact[J]. Procedia CIRP, 2012, 1: 518-523. "
+        "[4] HE Y. Energy consumption analysis[J]. Proc IMechE, 2012."
+    )
+    loose = "317 -331 . ［105］ZHU Z X ， XI X L ， XU X ， et al . Digital twin"
+    corpus = [
+        ("刀具/某篇.pdf", bibliography),
+        ("刀具/某篇.pdf", bibliography),
+        ("刀具/某篇.pdf", loose),
+    ]
+    retriever = Retriever(
+        [make_chunk(name, text) for name, text in corpus],
+        np.zeros((3, 4), dtype=np.float32),
+        None,
+    )
+
+    # 两个被标记 + 一个没标记，同一页 → 过半 → 三个都算参考文献
+    assert len(retriever.reference_rows()) == 3
+
+    single = Retriever(
+        [
+            make_chunk("刀具/某篇.pdf", bibliography),
+            make_chunk("刀具/某篇.pdf", "ok 正文"),
+            make_chunk("刀具/某篇.pdf", loose),
+        ],
+        np.zeros((3, 4), dtype=np.float32),
+        None,
+    )
+    assert len(single.reference_rows()) == 1  # 1/3 不过半，不补
+
+
 def test_subtopics_counts_chunks_and_marks_root_files():
     corpus = [
         ("刀具磨损监测/a.pdf", "alpha"),

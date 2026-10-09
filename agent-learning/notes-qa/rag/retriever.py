@@ -133,6 +133,7 @@ class SearchHit:
             "sparse_score": None
             if self.sparse_score is None
             else round(self.sparse_score, 6),
+            "is_reference": self.chunk.is_reference,
             "text": self.chunk.text,
         }
 
@@ -232,6 +233,26 @@ class Retriever:
             if chunk.source_path in KNOWN_UNREADABLE_SOURCES
         }
 
+    def reference_rows(self) -> set[int]:
+        """被判定为「参考文献列表」的片段行号（逐片段判定在建索引时做，见 `chunk`）。
+
+        这类片段是稠密书目信息，对很多查询都"语义上很像"（第 22 周实测两次被当候选），
+        所以默认不进候选池。**老索引没有这个标记**——加字段后必须重建一次索引才生效。
+
+        外加一道**页级多数表决**：文献表常被切得很碎（实测某页 10 个片段，每个只剩
+        1~2 条书目特征，逐片段判都判不出来），所以同一 `(文件, 位置)` 下**过半**片段被
+        标记时，整页按参考文献处理。只在过半时补，避免把"正文末尾接文献表"的页整页误伤。
+        """
+        flagged = {row for row, chunk in enumerate(self.chunks) if chunk.is_reference}
+        pages: dict[tuple[str, str], list[int]] = {}
+        for row, chunk in enumerate(self.chunks):
+            pages.setdefault((chunk.source_path, chunk.locator), []).append(row)
+        for rows in pages.values():
+            hits = sum(1 for row in rows if row in flagged)
+            if hits and hits * 2 >= len(rows):
+                flagged.update(rows)
+        return flagged
+
     def _rows_for_subtopic(self, subtopic: str | None) -> set[int] | None:
         """返回允许参与排名的行号集合；`None` 表示"不过滤"。"""
         if subtopic is None:
@@ -327,6 +348,7 @@ class Retriever:
         max_per_source: int | None = None,
         subtopic: str | None = None,
         exclude_unreadable: bool = True,
+        exclude_references: bool = True,
     ) -> list[SearchHit]:
         """混合检索。返回按融合分降序的 `SearchHit` 列表。
 
@@ -336,20 +358,25 @@ class Retriever:
         静默放宽范围会让"我只想在这批资料里找"变成一句空话）。
         `exclude_unreadable`：默认排除 `KNOWN_UNREADABLE_SOURCES`（那 2 篇 `/G` 乱码论文），
         它们能凭标题命中却引用不出可读原文。要复现"含它们"的检索再加 `False`。
+        `exclude_references`：默认排除**参考文献列表段**（书目信息对任何查询都高分，
+        第 22 周实测两次被当候选）。同样留了 `False` 的复现路径。
         """
         if not isinstance(query, str) or not query.strip() or top_k <= 0:
             return []
         pool = self.candidate_pool if candidates is None else candidates
         allowed = self._rows_for_subtopic(subtopic)
+        banned: set[int] = set()
         if exclude_unreadable:
-            banned = self.unreadable_rows()
-            if banned:
-                # allowed 为 None 表示"不过滤"，这里要变成"除了不该引用的那些，都允许"
-                allowed = (
-                    set(range(len(self.chunks))) - banned
-                    if allowed is None
-                    else allowed - banned
-                )
+            banned |= self.unreadable_rows()
+        if exclude_references:
+            banned |= self.reference_rows()
+        if banned:
+            # allowed 为 None 表示"不过滤"，这里要变成"除了不该进候选的那些，都允许"
+            allowed = (
+                set(range(len(self.chunks))) - banned
+                if allowed is None
+                else allowed - banned
+            )
         if allowed is not None and not allowed:
             return []
 
@@ -495,6 +522,11 @@ def _cli() -> int:
         help="不排除那 2 篇 /G 乱码论文（默认排除，见 KNOWN_UNREADABLE_SOURCES）",
     )
     parser.add_argument(
+        "--include-references",
+        action="store_true",
+        help="不排除参考文献列表段（默认排除，见 chunk.looks_like_reference_list）",
+    )
+    parser.add_argument(
         "--list-subtopics", action="store_true", help="列出子主题与片段数后退出"
     )
     parser.add_argument("--json", action="store_true", help="以 JSON 输出（机读）")
@@ -525,6 +557,7 @@ def _cli() -> int:
         max_per_source=args.max_per_source,
         subtopic=args.subtopic,
         exclude_unreadable=not args.include_unreadable,
+        exclude_references=not args.include_references,
     )
     if args.json:
         print(json.dumps([h.to_dict() for h in hits], ensure_ascii=False, indent=2))
