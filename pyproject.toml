@@ -5,6 +5,7 @@ description = "个人 Python 学习仓库：Agent 开发 + notes-qa 项目"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "fastapi>=0.143.0",
     "jieba>=0.42.1",
     "numpy>=2.5.3",
     "openai==3.8.0",
@@ -13,6 +14,7 @@ dependencies = [
     "python-docx>=1.2.0",
     "python-dotenv==1.2.3",
     "rank-bm25>=0.2.2",
+    "uvicorn>=0.53.0",
 ]
 
 [project.optional-dependencies]
