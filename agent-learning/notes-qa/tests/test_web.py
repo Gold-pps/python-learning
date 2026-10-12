@@ -31,7 +31,7 @@ from web.pricing import (
     is_peak,
     unit_prices,
 )
-from web.server import create_app
+from web.server import TokenRejected, create_app, local_addresses, main, token_problem
 from web.service import (
     MAX_QUESTION_CHARS,
     RunTrace,
@@ -223,6 +223,25 @@ def test_looks_like_follow_up():
     assert not looks_like_follow_up("数字孪生在机床误差补偿中有哪些应用？")
 
 
+def test_follow_up_heuristic_keeps_relative_attribute_questions():
+    """跨机首日（台账 T42）：**同样 7 个字，一个该带、一个不该带**——长度分不开它们。
+
+    该带：「优缺点有哪些？」——没有自己的主语，问的是"（上面那个东西的）属性"；
+    不该带：「异星工厂是什么」——自带新主语，是独立问题。
+    分得开的是"这句话有没有主语"：以「优缺点/局限/哪些…」开头的短句没有。
+    """
+    assert looks_like_follow_up("优缺点有哪些？")
+    assert looks_like_follow_up("局限是什么")
+    assert looks_like_follow_up("哪些更适合常规车削")
+
+    # 自带主语的独立问题照样不判追问
+    assert not looks_like_follow_up("异星工厂是什么")
+    assert not looks_like_follow_up("机床误差补偿有哪些方法？")
+    assert not looks_like_follow_up("刀具磨损检测有哪些主流方法？")
+    # 以属性词开头、但太长 → 更可能是独立问题
+    assert not looks_like_follow_up("优缺点对比在数控加工中心上的应用效果如何")
+
+
 def test_follow_up_heuristic_does_not_swallow_short_standalone_questions():
     """首跑记录（2026-10-10，台账 T37）：**短**不等于**追问**。
 
@@ -289,11 +308,14 @@ def test_ask_view_records_elapsed_and_cost_per_call():
     )
 
     assert [c["stage"] for c in view["calls"]] == ["plan", "answer"]
-    assert all(c["elapsed_s"] and c["elapsed_s"] > 0 for c in view["calls"])
-    assert (
-        view["elapsed"]["model_s"] >= sum(c["elapsed_s"] for c in view["calls"]) * 0.9
-    )
-    assert view["elapsed"]["total_s"] >= view["elapsed"]["model_s"]
+    per_call = [c["elapsed_s"] for c in view["calls"]]
+    assert all(value > 0 for value in per_call), "每次调用都必须记到耗时"
+    assert sum(per_call) >= 0.01, "两次调用各睡了 10ms，合计不该更小"
+    # 总数与分项之间留 10ms 容差：per-call 记到毫秒、总数记到两位小数，
+    # 机器忙的时候这两个四舍五入会互相咬一下——这条断言**真抖过一次**，
+    # 而"偶发红灯"比没有测试更糟（会让人开始无视红灯）。
+    assert view["elapsed"]["model_s"] >= sum(per_call) - 0.01
+    assert view["elapsed"]["total_s"] >= view["elapsed"]["model_s"] - 0.01
     assert view["cost"]["usd"] > 0 and view["cost"]["cny"] > 0
     assert view["tokens"]["prompt"] == 2000 and view["tokens"]["completion"] == 400
 
@@ -548,6 +570,53 @@ def test_api_ask_carries_previous_question_only_for_follow_ups(client, monkeypat
     assert view["retrieval_query"] == "那它的局限呢？"
 
 
+def test_start_event_only_claims_carry_when_it_really_carried(client, monkeypatch):
+    """界面说的必须与实际做的一致（台账 T41）。
+
+    旧写法拿"有上一问 + 开关开着"当"带上了"，于是判据说"不拼"的时候界面照样打横幅，
+    而日志里那两条 `"question": "优缺点有哪些？"` 明摆着没拼——用户会因此错判
+    "检索明明带了上下文，答案为什么还是跑偏"。
+    """
+    first = post_ask(client, monkeypatch, question="刀具磨损检测有哪些主流方法？")
+    session_id = parse_sse(first.text)[0]["session_id"]
+
+    carried = post_ask(
+        client, monkeypatch, question="优缺点有哪些？", session_id=session_id
+    )
+    assert (
+        parse_sse(carried.text)[0]["carried_previous"] == "刀具磨损检测有哪些主流方法？"
+    )
+
+    fresh = post_ask(
+        client, monkeypatch, question="异星工厂是什么", session_id=session_id
+    )
+    assert parse_sse(fresh.text)[0]["carried_previous"] is None, "没拼就不许说拼了"
+    view = parse_sse(fresh.text)[-1]["data"]
+    assert view["carried_from"] is None
+    assert view["retrieval_query"] == "异星工厂是什么"
+
+
+def test_candidates_carry_doc_type_for_the_front_end():
+    """界面靠 `doc_type` 区分"页 4"与"行/段 4~4"（台账 T43）。
+
+    `SearchHit.to_dict()` 里**没有**这个字段，是 web 层补的——补漏过一次，
+    而当时前端冒烟的假数据里手写了 `doc_type: "pdf"`，于是测试全绿、真数据一跑就露。
+    这条钉住契约：视图里的候选必须带 doc_type，且与 chunk 一致。
+    """
+    plan_call, answer_call = make_calls(
+        answer_reply("有方法", "刀具磨损监测/综述A.pdf:第 1 页")
+    )
+    view = ask(
+        "刀具磨损监测有哪些方法？",
+        FakeRetriever(fallback=HITS),
+        plan_call=plan_call,
+        answer_call=answer_call,
+    )
+
+    assert view["candidates"], "这条用例需要有候选"
+    assert all(c["doc_type"] == "pdf" for c in view["candidates"])
+
+
 def test_api_ask_rejects_empty_and_overlong_questions(client):
     assert client.post("/api/ask", json={"question": "   "}).status_code == 400
     too_long = client.post(
@@ -616,6 +685,56 @@ def test_health_reports_missing_index(tmp_path):
     # 与本进程的环境变量无关。这里只报"文件在不在"。
     assert set(body["api_key"]) == {"in_env", "env_file", "env_file_exists"}
     assert body["api_key"]["env_file"].endswith(".env")
+
+
+def test_token_must_be_printable_ascii():
+    """跨机试用第一天真踩到（台账 T40）：**中文口令会让浏览器直接拒绝发请求**。
+
+    这不是"洁癖校验"，是 HTTP 头的硬限制（字段值按 ISO-8859-1 传）。所以别让这种口令
+    进系统——启动时拒绝，比让人对着"自检失败 + 连接中断"的 TypeError 排查半天要好。
+    """
+    assert token_problem(None) is None
+    assert token_problem("notes-qa-2026") is None
+    assert token_problem("Abc123!@#$%^&*()-_=+") is None
+
+    problem = token_problem("自己定一个口令")
+    assert problem is not None and "ASCII" in problem
+    assert token_problem("abc 123") is not None  # 空格也放不进头部字段值
+
+    with pytest.raises(TokenRejected):
+        create_app(token="中文口令", log_path=None)
+
+
+def test_main_refuses_bad_token_before_touching_index(capsys, tmp_path):
+    """参数级错误要比环境级错误先报——否则在没有索引的机器上，这条检查根本走不到。"""
+    code = main(
+        [
+            "--host",
+            "0.0.0.0",
+            "--token",
+            "中文口令",
+            "--index",
+            str(tmp_path / "没有索引"),
+        ]
+    )
+
+    captured = capsys.readouterr().out
+    assert code == 2
+    assert "ASCII" in captured and "口令" in captured
+    assert "索引或依赖不齐" not in captured  # 证明它**没有**先去查索引
+
+
+def test_local_addresses_excludes_loopback():
+    """启动时印给使用者的"局域网地址"必须是**能打开的**地址。
+
+    早先绑 0.0.0.0 时印的是 `http://0.0.0.0:8000`——那不是网址，是绑定地址，
+    而这一步最需要的恰恰是"另一台机器填哪个"。机器上没有非回环网卡时返回空列表
+    （下面几条断言对空列表自然成立，不假装查到东西）。
+    """
+    for addr in local_addresses():
+        assert not addr.startswith("127.")
+        assert addr != "0.0.0.0"
+        assert addr.count(".") == 3
 
 
 def test_health_ready_when_retriever_injected(tmp_path):

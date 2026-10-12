@@ -32,7 +32,13 @@ from fastapi.responses import HTMLResponse, StreamingResponse
 from pydantic import BaseModel
 
 from web.pricing import PRICE_SNAPSHOT_DATE, PRICE_SOURCE_URL, describe_pricing, is_peak
-from web.service import MAX_QUESTION_CHARS, SessionStore, ask, new_session_id
+from web.service import (
+    MAX_QUESTION_CHARS,
+    SessionStore,
+    ask,
+    new_session_id,
+    will_carry,
+)
 
 BASE_DIR = Path(__file__).resolve().parent.parent  # .../notes-qa
 STATIC_DIR = Path(__file__).resolve().parent / "static"
@@ -42,6 +48,70 @@ ENV_FILE = BASE_DIR.parent / ".env"  # agent-learning/.env
 
 LOCAL_HOSTS = {"127.0.0.1", "localhost", "::1"}
 SSE_HEADERS = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
+
+
+def local_addresses() -> list[str]:
+    """本机在"默认路由那张网卡"上的 IPv4 地址，用来告诉使用者"另一台机器该填哪个地址"。
+
+    做法只有一句：对一个外部地址做 UDP `connect()`。它**不发任何包**（UDP 无连接），
+    只是让内核按路由表选出口网卡，于是 `getsockname()` 就是本机在该网段的地址。
+    立即返回，不需要 DNS。
+
+    **为什么不解析主机名**（`socket.getaddrinfo(socket.gethostname())`）：
+    试过，它会做一次 DNS 反查，而校园网/单位网的 DNS 偶尔很慢——
+    实测那一次让整个测试套件从 3.5s 变成 **25.5s**。启动横幅卡 20 秒是不能接受的，
+    而且这种等待**时快时慢**（DNS 缓存命中就快），比"慢一点"更难排查。
+    宁可查不到（返回空列表、让使用者去看 `ipconfig`），也不在网络调用上无限等。
+
+    机器多网卡时它只给默认路由那张卡——对"让同一网段的另一台机器连上"这个用途足够了。
+    """
+    import socket
+
+    probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        probe.connect(("8.8.8.8", 80))
+        addr = probe.getsockname()[0]
+    except OSError:
+        return []
+    finally:
+        probe.close()
+    return [addr] if not addr.startswith("127.") else []
+
+
+class TokenRejected(ValueError):
+    """口令里出现了 HTTP 头装不下的字符（见 `token_problem`）。"""
+
+
+def token_problem(token: str | None) -> str | None:
+    """口令能不能用；不能用就返回原因（能用返回 None）。
+
+    **规则：只允许可见 ASCII（字母 / 数字 / 英文标点，不含空格）。** 这不是洁癖，
+    是 HTTP 头本身的限制（RFC 9110：字段值按 ISO-8859-1 传）：
+
+    - 浏览器侧：`fetch` 见到非 Latin-1 的头部值会**直接抛错、请求根本不发**——
+      跨机试用第一天就用一个中文口令踩到了：`TypeError: ... String contains
+      non ISO-8859-1 code point`，界面上表现为"自检失败 + 连接中断"（台账 T40）；
+    - 服务端侧：ASGI 把头部字节按 **latin-1** 解码，所以就算客户端硬发原始 UTF-8 字节，
+      这里拿到的也是乱码、永远比不中。
+
+    两头都对不上，所以**别让这种口令进系统**：启动时拒绝，比让人对着一个
+    "看起来输了却什么都发不出去"的口令排查半天要好。
+    """
+    if token is None:
+        return None
+    bad: list[str] = []  # 按**出现顺序**记，不按码点排序
+    for ch in token:
+        if not 0x21 <= ord(ch) <= 0x7E and ch not in bad:
+            bad.append(ch)
+    if bad:
+        # 按出现顺序打印，使用者一眼能认出"这就是我刚输的那串"；
+        # 排序后（一个令口定己自）反而看不出是哪把口令。
+        return (
+            f"口令里有 HTTP 头装不下的字符：{''.join(bad)[:10]}。"
+            "口令只能用可见 ASCII（字母、数字、英文标点，不含空格）——"
+            "中文/emoji 会让浏览器直接拒绝发送请求。"
+        )
+    return None
 
 
 class AskBody(BaseModel):
@@ -118,6 +188,9 @@ def create_app(
 ) -> FastAPI:
     """构造应用。**依赖注入是为了测试**：注入假检索器后，整条链路可以离线跑完
     （见 `tests/test_web.py`），不需要 fastembed、不联网、不花 token。"""
+    problem = token_problem(token)
+    if problem:  # 程序化调用也不许把这种口令放进来，见 token_problem 的说明
+        raise TokenRejected(problem)
     app = FastAPI(title="notes-qa 资料问答", docs_url="/api/docs", redoc_url=None)
     app.state.index_dir = Path(index_dir or DEFAULT_INDEX_DIR)
     app.state.retriever = retriever  # None 表示"首次提问时懒加载"
@@ -228,6 +301,9 @@ def create_app(
         previous = (
             sessions_store.last_question(session_id) if body.carry_context else None
         )
+        # **界面说的必须和实际做的一致**：早先这里直接把 `previous` 当成"带上了上一问"发出去，
+        # 于是判据说"不拼"的时候界面照样打横幅（台账 T41）。这里问一次同一个判据。
+        carried = will_carry(question, previous, carry=body.carry_context)
 
         loop = asyncio.get_running_loop()
         queue: asyncio.Queue = asyncio.Queue()
@@ -296,7 +372,7 @@ def create_app(
                     "type": "start",
                     "session_id": session_id,
                     "question": question,
-                    "carried_previous": previous,
+                    "carried_previous": carried,
                 }
             )
             task = asyncio.create_task(run_and_finish())
@@ -389,17 +465,24 @@ def main(argv: list[str] | None = None) -> int:
         print(f"[自检] 就绪：{report['ready']}")
         return 0 if report["ready"] else 1
 
-    if not report["ready"]:
-        print("[拒绝启动] 索引或依赖不齐：")
-        print(json.dumps(report, ensure_ascii=False, indent=2))
+    # 两条**参数级**的检查放在环境检查之前：命令行打错了就该先听到命令行的问题
+    # （顺序也决定了报错是否确定——先查参数，测试在没有索引的机器上也跑得出一致结论）。
+    problem = token_problem(args.token)
+    if problem:
+        print(f"[拒绝启动] {problem}")
+        print('  例：python -m web.server --host 0.0.0.0 --token "notes-qa-2026"')
         return 2
     if not _is_local(args.host) and not args.token:
         print(
             "[拒绝启动] --host 不是本机回环地址，必须同时给 --token。\n"
             "  理由：这个服务会花你的 token 调模型，而且没有账号体系；\n"
             "  绑到 0.0.0.0 而不设口令，等于同网段任何人都能用你的额度提问。\n"
-            '  例：python -m web.server --host 0.0.0.0 --token "自己起一个口令"'
+            '  例：python -m web.server --host 0.0.0.0 --token "notes-qa-2026"'
         )
+        return 2
+    if not report["ready"]:
+        print("[拒绝启动] 索引或依赖不齐：")
+        print(json.dumps(report, ensure_ascii=False, indent=2))
         return 2
 
     import uvicorn
@@ -410,8 +493,12 @@ def main(argv: list[str] | None = None) -> int:
         token=args.token,
         thinking_model=args.thinking_model,
     )
-    shown = "127.0.0.1" if _is_local(args.host) else args.host
-    print(f"[notes-qa] 打开 http://{shown}:{args.port}")
+    print(f"[notes-qa] 本机打开 http://127.0.0.1:{args.port}")
+    if not _is_local(args.host):
+        # 绑 0.0.0.0 时**不能把 0.0.0.0 当网址印出来**（它不是能打开的地址）；
+        # 这一步最需要的恰恰是"另一台机器填哪个"。
+        for addr in local_addresses():
+            print(f"[notes-qa] 局域网打开 http://{addr}:{args.port}")
     print(f"[notes-qa] 索引：{index_dir}")
     if args.no_log:
         print("[notes-qa] 使用日志：已关闭（--no-log）")
@@ -420,11 +507,13 @@ def main(argv: list[str] | None = None) -> int:
             f"[notes-qa] 使用日志：{Path(args.log).resolve()}（提问会记进去，本地文件、不进 Git）"
         )
     if not _is_local(args.host):
+        print("[notes-qa] 另一台机器若连不上，按这个顺序查：")
+        print("           ① 两台机器在同一网段吗（前面几段数字要一样）")
         print(
-            "[notes-qa] 局域网访问：同网段用本机 IP 打开；口令写在 URL 里或界面首次提示时输入"
+            "           ② 从本机试 curl 上面的局域网地址——通不过就是 Windows 防火墙挡了入站"
         )
         print(
-            "[notes-qa] 若别人连不上：Windows 防火墙要放行该端口（本项目不做自动改防火墙）"
+            "           ③ 都通了还连不上，看学校网络是否隔离了终端（那就改用热点或网线直连）"
         )
     uvicorn.run(app, host=args.host, port=args.port, log_level="info")
     return 0

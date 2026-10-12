@@ -82,6 +82,37 @@ _ANAPHORA = (
 _CONTINUATION = ("还有", "继续", "接着", "展开说", "详细说", "详细讲")
 FOLLOW_UP_MAX_CHARS = 6
 
+# 第三类：**以"相对属性词"开头**的短句。它们问的不是某个新主题，而是"（上面那个东西的）某个属性"，
+# 天生依赖上文。判据是这样逼出来的（跨机首日，台账 T42）：
+#
+#   该带上 →「优缺点有哪些？」（7 字、无指代词，前两版判据都漏了它；模型的盘点自己写了
+#            "问题未指明讨论对象"，答案散成热误差/产线/轨迹三摊）
+#   不该带 →「异星工厂是什么」（7 字，同样的长度，但自带新主语）
+#
+# **长度分不开它们**——这又是 T31/T36 那条老教训。分得开的是"这句话有没有自己的主语"：
+# 以「优缺点/局限/区别/哪些…」开头 = 没有主语、在问相对属性；以「刀具磨损检测…」开头 = 有主语。
+_RELATIVE_OPENERS = (
+    "优缺点",
+    "优点",
+    "缺点",
+    "局限",
+    "不足",
+    "区别",
+    "差异",
+    "相同点",
+    "不同点",
+    "特点",
+    "特征",
+    "代价",
+    "成本",
+    "风险",
+    "效果",
+    "哪些",
+)
+RELATIVE_OPENER_MAX_CHARS = (
+    12  # 再长就不像"接着上文问一句"了（"机床误差补偿有哪些方法？"是独立问题）
+)
+
 # 进度行的文案：**只写这一步在做什么，不带注解**。
 # 早先写成"检索资料库（本地，不花钱）""组织四段式答案（最慢的一步）"，
 # 那些话属于使用说明，塞进进度行只会把"走到哪了"这件事本身冲淡。
@@ -96,11 +127,17 @@ _STAGE_LABELS = {
 
 
 def looks_like_follow_up(question: str) -> bool:
-    """这句话离开上文还能不能检索？带指代词/追问标记词、或短到 6 字以内的判为"不能"。"""
+    """这句话离开上文还能不能检索？
+
+    四类判为"不能"（即：需要把上一问拼进来）：极短句、含指代词、含追问标记词、
+    以相对属性词开头的短句。三类判据的来源与反例都写在上面常量那两段注释里。
+    """
     text = (question or "").strip()
     if len(text) <= FOLLOW_UP_MAX_CHARS:
         return True
-    return any(hint in text for hint in _ANAPHORA + _CONTINUATION)
+    if any(hint in text for hint in _ANAPHORA + _CONTINUATION):
+        return True
+    return text.startswith(_RELATIVE_OPENERS) and len(text) <= RELATIVE_OPENER_MAX_CHARS
 
 
 def compose_query(
@@ -112,6 +149,17 @@ def compose_query(
     if not carry or not previous or not looks_like_follow_up(text):
         return text, None
     return f"{previous} {text}", previous
+
+
+def will_carry(question: str, previous: str | None, *, carry: bool) -> str | None:
+    """这次**到底**会不会把上一问拼进去——给界面用的那一个字段。
+
+    单开一个函数是因为踩过一次（台账 T41）：服务层当时是拿"有上一问 + 开关开着"
+    当作"带上了"，于是界面打出"本次检索词带上了上一问"，而日志里那两条
+    `"question": "优缺点有哪些？"` 明摆着**没拼**。**界面说的必须和实际做的一致**，
+    否则用户会以为检索带了上下文、从而错判答案为什么会跑偏。
+    """
+    return compose_query(question, previous, carry=carry)[1]
 
 
 # ---- 计时与进度：三个包装，全部通过注入生效 ----
@@ -306,8 +354,11 @@ def build_view(
     peak: bool,
 ) -> dict:
     """纯函数：`ReviewResult` + 计时 → 前端可直接渲染的字典。"""
+    # `doc_type` 必须自己补：`SearchHit.to_dict()` 里**没有**这个字段（它属于 chunk、不属于 hit），
+    # 而界面上显示"页 4"还是"行/段 4~4"全靠它——不补的话 PDF 会被标成"行/段"（台账 T43）。
     candidates = [
-        dict(hit.to_dict(), citation=citation_of(hit)) for hit in result.candidates
+        dict(hit.to_dict(), citation=citation_of(hit), doc_type=hit.chunk.doc_type)
+        for hit in result.candidates
     ]
     calls = [_call_view(call, peak=peak) for call in result.calls]
     prompt_tokens = sum(c["prompt_tokens"] for c in calls)

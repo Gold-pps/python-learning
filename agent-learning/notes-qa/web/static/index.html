@@ -96,12 +96,12 @@
 </header>
 
 <main>
-  <div class="card" id="gate">
+  <div class="card hidden" id="gate">
     <div class="ask-row">
       <input type="password" id="tokenInput" placeholder="访问口令" style="flex:1">
       <button class="primary" id="tokenBtn">保存口令</button>
     </div>
-    <div class="controls"><span>这台机器开启了口令保护，口令向部署者索取（存在浏览器本地，不上传）。</span></div>
+    <div class="controls"><span id="gateHint">这台机器开启了口令保护，口令向部署者索取（存在浏览器本地，不上传）。</span></div>
   </div>
 
   <div class="card">
@@ -152,6 +152,11 @@ async function loadHealth() {
     if (h.auth && !h.authorized) {
       $("gate").classList.remove("hidden");
       $("health").textContent = "需要访问口令";
+      if (state.token && !TOKEN_OK.test(state.token)) {
+        // 本地存着的旧口令是非 ASCII（老版本存下来的）：不可能对上，直接说清
+        $("gateHint").textContent =
+          "本地保存的口令含非 ASCII 字符，发不出去。请向部署者要一个字母数字口令后重新填写。";
+      }
       return;
     }
     $("gate").classList.add("hidden");
@@ -182,9 +187,15 @@ async function loadHealth() {
   }
 }
 
+// 口令只允许可见 ASCII：HTTP 头按 ISO-8859-1 传，中文/emoji 会让 fetch **在发请求前**
+// 就抛 "String contains non ISO-8859-1 code point"（跨机试用第一天踩到，台账 T40）。
+// 服务端也会拒绝这种口令，这里是第二道——而且要把话说清楚，别让人对着
+// "自检失败 + 连接中断"猜半天。
+const TOKEN_OK = /^[\x21-\x7e]*$/;
+
 function authHeaders() {
   const h = { "Content-Type": "application/json" };
-  if (state.token) h["X-Token"] = state.token;
+  if (state.token && TOKEN_OK.test(state.token)) h["X-Token"] = state.token;
   return h;
 }
 
@@ -465,8 +476,15 @@ $("reset").addEventListener("click", async () => {
   $("total").innerHTML = "本次会话累计：<b>$0.0000</b>";
 });
 $("tokenBtn").addEventListener("click", () => {
-  state.token = $("tokenInput").value.trim();
-  localStorage.setItem("notesqa_token", state.token);
+  const value = $("tokenInput").value.trim();
+  if (!TOKEN_OK.test(value)) {
+    // 存下来也没用：这个口令永远发不出去，只会得到一句看不懂的 TypeError
+    $("gateHint").textContent =
+      "口令只能用字母、数字和英文标点（HTTP 头装不下中文，填了会发不出请求）。";
+    return;
+  }
+  state.token = value;
+  localStorage.setItem("notesqa_token", value);
   $("gate").classList.add("hidden");
   loadHealth();
 });

@@ -72,7 +72,10 @@ function makeEl(tag = "div") {
   return node;
 }
 
-const IDS = ["health", "total", "gate", "hint", "q", "send", "reset", "tokenInput", "tokenBtn", "pricing", "thread"];
+const IDS = [
+  "health", "total", "gate", "gateHint", "hint", "q", "send", "reset",
+  "tokenInput", "tokenBtn", "pricing", "thread",
+];
 const byId = Object.fromEntries(IDS.map((id) => [id, makeEl()]));
 const document = {
   getElementById: (id) => byId[id] || makeEl(),
@@ -110,7 +113,7 @@ const factory = new Function(
   "document",
   "localStorage",
   "fetch",
-  src + "\nreturn { stepLine, handleEvent, renderResult, state, el, ask };"
+  src + "\nreturn { stepLine, handleEvent, renderResult, state, el, ask, authHeaders };"
 );
 const app = factory(document, localStorage, fetch);
 
@@ -249,6 +252,9 @@ const view = {
   assert.ok(quote, "点引用应展开一个 quote 块");
   assert.match(textOf(quote), /这是候选片段的原文全文/, "展开的必须是原文，不是提示词里的截断版");
   assert.match(textOf(quote), /第 2 页/);
+  // PDF 要写"页 2"，不能写成"行/段 2"（T43：`doc_type` 漏传时就是这样）
+  assert.match(textOf(quote), /页 2/);
+  assert.ok(!/行\/段/.test(textOf(quote)), "PDF 候选不该被标成行/段");
 
   // 只到文件 → 列出该文件本次命中的片段，并说明只能回到文件层面
   partialChip.click();
@@ -313,6 +319,31 @@ const view = {
     walk(card).some((n) => n.className === "done" && /命中 5 条/.test(n.textContent)),
     "进度条应留下一行 done 记录"
   );
+}
+
+// ---- 5. 口令：非 ASCII 必须在"提交前"就被拦住（T40）----
+// 现场：使用者把中文口令填进去，自检与提问两个请求**全部**报
+// "TypeError: ... String contains non ISO-8859-1 code point"——那不是"口令错"，
+// 是请求压根构造不出来。所以两道：不存下来、也不放进请求头。
+{
+  app.state.token = "";
+  byId["tokenInput"].value = "自己定一个口令";
+  byId["gateHint"].textContent = "";
+  byId["tokenBtn"].click();
+
+  assert.equal(app.state.token, "", "非 ASCII 口令不该被存下来");
+  assert.match(byId["gateHint"].textContent, /英文标点/, "要说明为什么不行，别让人对着 TypeError 猜");
+
+  app.state.token = "中文口令";
+  assert.equal(app.authHeaders()["X-Token"], undefined, "非 ASCII 口令绝不能进请求头");
+
+  app.state.token = "notes-qa-2026";
+  assert.equal(app.authHeaders()["X-Token"], "notes-qa-2026", "正常口令要照常带上");
+
+  byId["tokenInput"].value = "notes-qa-2026";
+  byId["tokenBtn"].click();
+  assert.equal(app.state.token, "notes-qa-2026", "合法口令应被接受");
+  assert.equal(storage.get("notesqa_token"), "notes-qa-2026", "并落到本地存储供下次使用");
 }
 
 console.log("FRONTEND SMOKE OK");
