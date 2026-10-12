@@ -300,8 +300,10 @@ def _link_citations(sections: dict, candidates: list) -> dict:
                 "hit_index": None,
                 "file_hits": by_file[norm],
             }
-        # 走到这里说明校验那一步就该把它挑出来了。留着而不是丢掉：
-        # 界面要能显示"这条引用回查不了"，这比静默消失诚实（T28 的教训）。
+        # **防御分支，正常路径走不到**：编造引用在 `validate_citations()` 里就已经从条目上
+        # 摘掉了（它进 `citation_invalid` 单独示众），所以这里拿到的引用要么精确、要么只到文件。
+        # 留着是因为"点不开"比抛异常好——但界面**不许**把它当成常规展示（T44：
+        # 早先界面上那条"红底 = 回查不到"就是这么来的：一条走不到的路径被当成主路径写进了文档）。
         return {"text": raw, "kind": "unresolved", "hit_index": None}
 
     linked: dict = {}

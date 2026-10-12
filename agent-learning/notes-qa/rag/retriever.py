@@ -39,7 +39,19 @@ from .chunk import Chunk
 
 # ---- 默认参数 ----
 RRF_K = 60  # RRF 平滑常数，原论文取值
-DEFAULT_TOP_K = 5  # 最终返回条数
+
+# 最终返回条数。**5 → 8 是实测调上来的，不是拍的**（第 25 周离线对照，两组命令见
+# `eval/第25周top_k对照.md` 与 `-k8.md`，同一批 20 题、同一索引 `data/index-notes`）：
+#
+#   严格判据合计   k=5 → k=8       有答案类（10 题）
+#   关键词基线     1/20 → 1/20      1/10 → 1/10
+#   BM25          7/20 → 9/20      5/10 → 7/10
+#   纯向量         6/20 → 10/20     4/10 → 6/10
+#   混合(RRF)      7/20 → 9/20      5/10 → 6/10
+#
+# 提升集中在"有答案"类，也就是那个老病："**找对了文档、却找不到那一段**"——
+# 正确答案在同一篇的后几个片段里，k=5 排不下。跨文档/多跳只是小幅波动。
+DEFAULT_TOP_K = 8
 CANDIDATE_POOL = 20  # 每个通道取多少条候选（也是送进 LLM 重排的上限）
 
 # jieba 的词典缓存默认落在**当前工作目录**（一个 9 MB 的 `jieba.cache`）。跑一次测试就在仓库根
@@ -93,6 +105,68 @@ def tokenize(text: str) -> list[str]:
     import jieba
 
     return [tok.casefold() for tok in jieba.lcut(text) if _TOKEN_KEEP.search(tok)]
+
+
+# ---- 查询侧切词（遗留 #4 / T27：停用词与单字词）----
+#
+# **只作用于查询，不动索引侧**。索引侧的词袋决定 BM25 的统计口径（idf、平均长度），
+# 动它等于把所有历史对比数字一起作废；而查询侧过滤只影响"这一句话怎么去匹配"，
+# 代价与收益都能单独度量（第 25 周就是拿同一批 20 题量的）。
+#
+# 规则两条，都是"宁可不丢"：
+# 1. 停用词：虚词与疑问词（它们出现在问题里、几乎不出现在论文正文里）；
+# 2. 单字词：**只在剩下的多字词 ≥2 个时才丢**——"轴的热误差"里那个"轴"是有信息的，
+#    丢了它这一句就只剩"热误差"一个词了。
+_QUERY_STOPWORDS = frozenset(
+    {
+        "的",
+        "了",
+        "是",
+        "在",
+        "有",
+        "和",
+        "与",
+        "及",
+        "或",
+        "中",
+        "对",
+        "为",
+        "上",
+        "下",
+        "这",
+        "那",
+        "什么",
+        "哪些",
+        "哪个",
+        "怎么",
+        "如何",
+        "为什么",
+        "可以",
+        "需要",
+        "进行",
+        "通过",
+        "以及",
+        "还有",
+        "他们",
+        "它们",
+        "我们",
+        "一下",
+        "介绍",
+        "讲讲",
+        "说说",
+        "告诉",
+    }
+)
+
+
+def tokenize_query(text: str) -> list[str]:
+    """查询侧切词：在 `tokenize` 之上丢掉"对区分度没贡献"的词（见上面的规则说明）。"""
+    tokens = tokenize(text)
+    words = [tok for tok in tokens if tok not in _QUERY_STOPWORDS]
+    multi = [tok for tok in words if len(tok) > 1]
+    if len(multi) >= 2:
+        return multi
+    return words or tokens  # "轴是什么"这类只剩单字/纯疑问的句子：退回不过滤
 
 
 @dataclass(frozen=True)
@@ -185,6 +259,7 @@ class Retriever:
         embedder=None,
         *,
         tokenizer=tokenize,
+        query_tokenizer=None,
         rrf_k: int = RRF_K,
         candidate_pool: int = CANDIDATE_POOL,
     ):
@@ -195,6 +270,12 @@ class Retriever:
         self.chunks = list(chunks)
         self.vectors = np.asarray(vectors, dtype=np.float32)
         self.embedder = embedder
+        # 查询侧默认多一道过滤（停用词 / 单字词，见 `tokenize_query` 的说明）。
+        # 但**注入了自定义 tokenizer 时不加这道**：索引与查询必须用同一套切法，
+        # 否则 BM25 的词表对不上，稀疏通道会静默变成"什么都没命中"。
+        self.query_tokenizer = query_tokenizer or (
+            tokenize_query if tokenizer is tokenize else tokenizer
+        )
         self.tokenizer = tokenizer
         self.rrf_k = rrf_k
         self.candidate_pool = candidate_pool
@@ -319,7 +400,8 @@ class Retriever:
         bm25 = self._bm25_index()
         if bm25 is None:
             return []
-        tokens = self.tokenizer(query)
+        # 命中判定与打分都用**查询侧**那一套（索引侧的词袋在 `_bm25_index()` 里，别混）
+        tokens = self.query_tokenizer(query)
         if not tokens:
             return []
         matched: set[int] = set()

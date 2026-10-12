@@ -478,6 +478,88 @@ def test_reference_page_majority_marks_the_whole_page():
     assert len(single.reference_rows()) == 1  # 1/3 不过半，不补
 
 
+# ---- 第 25 周：查询侧过滤（遗留 #4 / T27）----
+
+
+def test_tokenize_query_drops_stopwords_and_single_chars():
+    """查询侧比索引侧多丢两类词：虚词/疑问词，以及"多字词还够多"时的单字词。
+
+    为什么值得加这道过滤：问题里满是"有哪些 / 的 / 是"，它们在 BM25 里会命中一大片文档，
+    把真正有信息的那几个词挤下去。第 25 周实测（20 题、`data/index-notes`、k=8、离线）：
+    混合检索的严格判据 **9/20 → 12/20**，跨文档 1/5 → 2/5、多跳 2/5 → 3/5。
+    """
+    tokens = R.tokenize_query("刀具磨损监测有哪些主流方法？")
+
+    assert "哪些" not in tokens, "疑问词对区分度没贡献"
+    assert all(len(tok) > 1 for tok in tokens)
+    assert {"刀具", "磨损", "监测", "主流", "方法"} <= set(tokens)
+
+
+def test_tokenize_query_keeps_single_chars_when_they_carry_the_meaning():
+    """只剩一个多字词时就别丢单字——"轴"在这一句里是有信息的。
+
+    注意 jieba 把"热误差"切成了 `热 / 误差`（这条断言是按**实测**的切法写的，
+    不是按我猜的：第一版我断言 `"热误差" in tokens`，它挂了——猜切法就会这样）。
+    """
+    tokens = R.tokenize_query("轴的热误差")
+
+    assert "轴" in tokens and "误差" in tokens
+    assert "的" not in tokens
+
+
+def test_tokenize_query_falls_back_when_everything_is_a_question_word():
+    """ "是什么"这种句子过滤完就空了——退回不过滤，别把查询变成空串。"""
+    assert R.tokenize_query("是什么"), "过滤成空等于这一轮检索白跑"
+
+
+def test_custom_tokenizer_disables_query_side_filtering():
+    """注入了自定义分词器时**不做**查询侧过滤。
+
+    索引侧与查询侧必须用同一套切法：索引按一种切法建词袋、查询按另一种切，
+    BM25 的词表就对不上，稀疏通道会**静默**变成"什么都没命中"——这种失败最费劲。
+    """
+    chunk = make_chunk("a.md", "刀具磨损 监测")
+    retriever = Retriever(
+        [chunk], np.zeros((1, 4), dtype=np.float32), None, tokenizer=str.split
+    )
+
+    assert retriever.query_tokenizer is str.split
+
+
+def test_retrieval_depth_matches_the_measured_value():
+    """默认检索深度是**实测调的**：k=5 → k=8 让混合检索的严格判据 7/20 → 9/20，
+    再加上查询侧过滤到 12/20（三份原始输出见 `eval/第25周top_k对照*.md`）。
+
+    钉住它是为了：以后有人凭直觉把它改回 5 时，先能看见这条注释与那三份数据。
+    """
+    from rag.review_qa import REVIEW_TOP_K
+
+    assert R.DEFAULT_TOP_K == 8
+    # 数值巧合相同，但两者**解耦**：一个是检索质量参数、一个是 prompt 成本参数
+    # （T31 的教训：一个常量被两件事复用，改一处另一处跟着变却不知道）
+    assert REVIEW_TOP_K == 8
+
+
+def test_rerank_trigger_is_always_on_under_rrf_ties():
+    """遗留 #3 的定论钉在这里：RRF **大量并列**，相邻分差常为 0，于是判据恒触发。
+
+    这不是"阈值没调对"——RRF 分数是**排名组合**的函数，并列是常态，所以拿它做
+    "分得开就不重排"的成本控制**不成立**（第 25 周定论，见 `rag/评测说明.md` 第七节）。
+    行为**有意保留**（第 19 周实测重排值这个钱：严格判据 7/20 → 12/20）；
+    这条测试的作用是：哪天有人改了 RRF 或阈值，它会提醒"这个判据的行为变了"，
+    而不是让人以为成本控制忽然生效了。
+    """
+    from rag.rerank import should_rerank
+
+    def hit(score: float):
+        return SearchHit(chunk=make_chunk("a.md", "text"), score=score)
+
+    need, smallest = should_rerank([hit(0.03), hit(0.03)])
+
+    assert smallest == 0.0
+    assert need is True, "并列（分差 0）时 0 < RERANK_GAP，判据必然触发"
+
+
 def test_subtopics_counts_chunks_and_marks_root_files():
     corpus = [
         ("刀具磨损监测/a.pdf", "alpha"),

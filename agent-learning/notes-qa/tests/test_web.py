@@ -20,9 +20,19 @@ import json
 from datetime import datetime, timedelta
 
 import pytest
+
+# 假检索器 / 假模型调用放共用模块里（前端冒烟也要用同一份），
+# 那里的 `build_sample_view()` 还会从真实 ask() 产物派生视图夹具。
+from _web_fakes import (
+    HITS,
+    USAGE,
+    FakeRetriever,
+    answer_reply,
+    make_calls,
+    make_hit,
+    plan_reply,
+)
 from fastapi.testclient import TestClient
-from rag.chunk import Chunk
-from rag.retriever import SearchHit
 from web.pricing import (
     BEIJING,
     PRICE_OFFPEAK,
@@ -45,84 +55,10 @@ from web.service import (
     render_view_markdown,
 )
 
-USAGE = {
-    "prompt_tokens": 1000,
-    "completion_tokens": 200,
-    "cached_tokens": 400,
-    "finish_reason": "stop",
-}
-
-
 # ---- 夹具：假检索器与假模型调用 ----
-
-
-def make_hit(name: str, text: str, locator: str = "第 1 页") -> SearchHit:
-    chunk = Chunk.create(
-        source_path=name, doc_type="pdf", locator=locator, start=1, end=1, text=text
-    )
-    return SearchHit(chunk=chunk, score=0.03, dense_rank=1, sparse_rank=1)
-
-
-class FakeRetriever:
-    """按查询词返回预设命中，并记录收到的每个查询。"""
-
-    def __init__(self, table=None, fallback=None):
-        self.table = table or {}
-        self.fallback = fallback or []
-        self.queries: list[str] = []
-        self.marker = "我是检索器上挂着的属性"  # 给 __getattr__ 转发测试用
-
-    def search(self, query, top_k=5, **kwargs):
-        self.queries.append(query)
-        hits = self.table.get(query)
-        return list(hits if hits is not None else self.fallback)
-
-
-def plan_reply(enough=True, gaps=(), follows=()) -> str:
-    return json.dumps(
-        {"enough": enough, "gaps": list(gaps), "follow_up_queries": list(follows)},
-        ensure_ascii=False,
-    )
-
-
-def answer_reply(text: str, citation: str, key: str = "研究现状") -> str:
-    payload = {k: [] for k in ("研究现状", "方法对比", "结论", "可复用点")}
-    payload[key] = [{"point": text, "citations": [citation]}]
-    payload["insufficient"] = False
-    payload["note"] = ""
-    return json.dumps(payload, ensure_ascii=False)
-
-
-def make_calls(answer_text: str, *, plan: str | None = None, sleep: float = 0.0):
-    """构造 (plan_call, answer_call) 两个假调用，签名与真实的一致。"""
-
-    def plan_call(prompt, **kwargs):
-        if sleep:
-            import time
-
-            time.sleep(sleep)
-        return (plan or plan_reply(True)), dict(USAGE)
-
-    def answer_call(prompt, **kwargs):
-        if sleep:
-            import time
-
-            time.sleep(sleep)
-        return answer_text, dict(USAGE)
-
-    return plan_call, answer_call
-
-
-HITS = [
-    make_hit(
-        "刀具磨损监测/综述A.pdf", "振动信号与电流信号是工业可接受的两种监测手段。"
-    ),
-    make_hit(
-        "刀具磨损监测/研究B.pdf",
-        "力传感器精度高但成本高、不易安装。",
-        locator="第 5 页",
-    ),
-]
+#
+# 它们与 `test_web_frontend.py` 共用，所以放在 `_web_fakes.py` 里（一份实现，两处使用）；
+# 那里还有"从真实 ask() 产物派生视图夹具"的生成器——见该模块 docstring 里 T43 的教训。
 
 
 @pytest.fixture
@@ -596,6 +532,36 @@ def test_start_event_only_claims_carry_when_it_really_carried(client, monkeypatc
     assert view["retrieval_query"] == "异星工厂是什么"
 
 
+def test_fabricated_citations_never_reach_the_answer_body():
+    """编造的引用被**摘掉 + 单独记账**，而不是挂在结论上（T44）。
+
+    口径：挂在结论上的引用意味着"这条结论有出处"，而编造的出处不是出处；
+    但"看得见"必须由别的地方保证——所以同一份回答里，它要出现在 `citations.invalid`，
+    且那条结论要计进"无引用条目"（它确实没有可回查的出处）。
+
+    界面上那条"红底 / 回查不到"是**兜底分支**：正常数据里一个都不该出现
+    （它之所以一度看起来是绿的，是因为前端夹具是我手写的）。
+    """
+    plan_call, answer_call = make_calls(
+        answer_reply("有方法", "幽灵.pdf:第 9 页")  # 这个文件不在候选里
+    )
+    view = ask(
+        "刀具磨损监测有哪些方法？",
+        FakeRetriever(fallback=HITS),
+        plan_call=plan_call,
+        answer_call=answer_call,
+    )
+
+    assert view["citations"]["invalid"] == ["幽灵.pdf:第 9 页"]
+    assert view["citations"]["uncited"] == 1, "只有编造引用的条目＝没有可回查出处"
+    kinds = [
+        cite["kind"]
+        for row in view["sections"]["研究现状"]
+        for cite in row["citations"]
+    ]
+    assert kinds == [], "编造引用不该留在条目上（留着等于承认它是条出处）"
+
+
 def test_candidates_carry_doc_type_for_the_front_end():
     """界面靠 `doc_type` 区分"页 4"与"行/段 4~4"（台账 T43）。
 
@@ -759,3 +725,123 @@ def test_api_ask_without_index_reports_actionable_error(tmp_path):
     assert error, events
     assert "索引不可用" in error[0]["message"]
     assert "chunks.jsonl" in error[0]["message"]
+
+
+# ---- 第 25 周补：几条"真跑踩过、pytest 里还没有"的分支 ----
+
+
+class ExplodingRetriever(FakeRetriever):
+    """检索中途炸掉（不是"没有索引"，而是运行时异常）。"""
+
+    def search(self, *args, **kwargs):
+        raise RuntimeError("检索器炸了")
+
+
+def test_api_ask_reports_runtime_failure_as_event(tmp_path, monkeypatch):
+    """运行时炸掉也要变成一条 SSE 事件，**不能让前端只看到一个断掉的连接**。
+
+    对应界面上的"本次失败：…"那一行：前端能拿到 message 才谈得上显示，
+    否则用户看到的就是"连接中断：TypeError/无响应"这种查不下去的东西。
+    """
+    app = create_app(
+        index_dir=tmp_path, retriever=ExplodingRetriever(), log_path=None, token=None
+    )
+    with TestClient(app) as c:
+        events = parse_sse(c.post("/api/ask", json={"question": "随便问问"}).text)
+
+    error = [e for e in events if e["type"] == "error"]
+    assert error, f"运行时异常必须变成 error 事件，实际事件：{events}"
+    assert "检索器炸了" in error[0]["message"]
+
+
+def test_api_ask_accepts_unknown_session_id(tmp_path, monkeypatch):
+    """客户端自己编一个 session_id 不该报错——当新会话处理（界面刷新/换标签页就是这样）。"""
+    app = create_app(retriever=FakeRetriever(fallback=HITS), token=None, log_path=None)
+    with TestClient(app) as c:
+        resp = post_ask(
+            c, monkeypatch, question="刀具磨损监测有哪些方法？", session_id="我自己编的"
+        )
+        events = parse_sse(resp.text)
+
+    start = events[0]
+    assert start["type"] == "start"
+    assert start["session_id"] == "我自己编的"
+    assert start["carried_previous"] is None, "没见过的会话没有上一问可带"
+
+
+def test_api_ask_keeps_sessions_isolated(monkeypatch):
+    """两个会话同时问同一句话，各自追问各带各的上文（G4 第 5 条：并发会话互不干扰）。
+
+    跨机试用时人工验过一次（两个浏览器各自追问），这里把它变成**回归测试**——
+    哪天会话表被改坏了，不应该等到有人在两台机器上试才发现。
+    """
+    client = TestClient(
+        create_app(retriever=FakeRetriever(fallback=HITS), log_path=None)
+    )
+    with client:
+        # 两个"浏览器"各自问一个不同的问题
+        post_ask(
+            client, monkeypatch, question="刀具磨损监测有哪些方法？", session_id="甲"
+        )
+        post_ask(
+            client, monkeypatch, question="数字孪生在生产线上怎么用？", session_id="乙"
+        )
+
+        # 同一句追问，各自带各自的上文
+        jia = parse_sse(
+            post_ask(
+                client, monkeypatch, question="那他们的局限呢", session_id="甲"
+            ).text
+        )
+        yi = parse_sse(
+            post_ask(
+                client, monkeypatch, question="那他们的局限呢", session_id="乙"
+            ).text
+        )
+
+    assert jia[0]["carried_previous"] == "刀具磨损监测有哪些方法？"
+    assert yi[0]["carried_previous"] == "数字孪生在生产线上怎么用？"
+
+
+def test_view_reports_log_path_only_when_logging_is_on(tmp_path, monkeypatch):
+    """界面上那行"本次已记入使用日志：…"只在真开了日志时出现（别报一个不存在的路径）。"""
+    log = tmp_path / "usage.jsonl"
+    with_log = TestClient(
+        create_app(retriever=FakeRetriever(fallback=HITS), log_path=log, token=None)
+    )
+    with with_log:
+        view = parse_sse(post_ask(with_log, monkeypatch).text)[-1]["data"]
+    assert view["logged_to"] == str(log)
+    assert log.exists(), "开了日志就该真的写进文件"
+
+    quiet = TestClient(
+        create_app(retriever=FakeRetriever(fallback=HITS), log_path=None)
+    )
+    with quiet:
+        view = parse_sse(post_ask(quiet, monkeypatch).text)[-1]["data"]
+    # 没开日志时**这个键根本不出现**（不是空字符串）：界面那行靠 `if (view.logged_to)` 决定，
+    # 少一个键比多一个"看起来像路径"的空值更难被误读。
+    assert "logged_to" not in view
+
+
+def test_same_session_counts_turns(monkeypatch):
+    """同一会话里的 turn 要递增；**不给 session_id 时每次都是新会话**（turn 回到 1）。
+
+    两条都要钉住：前者是"同一浏览器连着问"的语义，后者是"不传会话就当无状态单次提问"
+    ——刷新页面后轮次重新从 1 开始是有意如此（会话只在内存里，见使用说明 FAQ）。
+    """
+    client = TestClient(
+        create_app(retriever=FakeRetriever(fallback=HITS), log_path=None)
+    )
+    with client:
+        first = parse_sse(
+            post_ask(client, monkeypatch, question="问题一", session_id="甲").text
+        )[-1]
+        second = parse_sse(
+            post_ask(client, monkeypatch, question="问题二", session_id="甲").text
+        )[-1]
+        fresh = parse_sse(post_ask(client, monkeypatch, question="问题三").text)[-1]
+
+    assert first["turn"] == 1
+    assert second["turn"] == 2
+    assert fresh["turn"] == 1, "不给 session_id = 新会话，轮次从 1 起"

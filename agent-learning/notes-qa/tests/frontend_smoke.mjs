@@ -169,54 +169,12 @@ const textOf = (node) => walk(node).map((n) => n.textContent).join("");
 }
 
 // ---- 3. 结果渲染：四段、成本耗时、引用点开看原文 ----
-const view = {
-  question: "刀具磨损有哪些检测方法？",
-  retrieval_query: "刀具磨损有哪些检测方法？",
-  carried_from: null,
-  sections: {
-    研究现状: [
-      {
-        point: "有两种主流做法",
-        citations: [
-          { text: "刀具/A.pdf:第 2 页", kind: "exact", hit_index: 0 },
-          { text: "刀具/B.pdf", kind: "partial", hit_index: null, file_hits: [1] },
-          { text: "幽灵.pdf:第 9 页", kind: "unresolved", hit_index: null },
-        ],
-      },
-    ],
-    方法对比: [{ point: "方法A", pros: "便宜", cons: "精度差", citations: [] }],
-    结论: [],
-    可复用点: [],
-  },
-  insufficient: true,
-  note: "资料中没有直接答案，以下是相邻证据。",
-  degraded: false,
-  reason: "四段式回答已产出",
-  plan_reason: "候选已足够",
-  thinking_recommended: true,
-  citations: { exact: 1, partial: 1, invalid: ["幽灵.pdf:第 9 页"], uncited: 0 },
-  candidates: [
-    {
-      source_path: "刀具/A.pdf", locator: "第 2 页", start: 2, end: 2, doc_type: "pdf",
-      channels: "dense+sparse", score: 0.03, dense_rank: 1, sparse_rank: 1,
-      text: "这是候选片段的原文全文，点开引用要能看到它。",
-    },
-    {
-      source_path: "刀具/B.pdf", locator: "第 5 页", start: 5, end: 5, doc_type: "pdf",
-      channels: "dense", score: 0.02, dense_rank: 2, sparse_rank: null,
-      text: "B 的原文。",
-    },
-  ],
-  retrieval: [{ round: 1, query: "刀具磨损有哪些检测方法？", hits: 2, elapsed_s: 0.05 }],
-  calls: [
-    { stage: "plan", elapsed_s: 0.4, cost: { usd: 0.0004, cny: 0.003 }, prompt_tokens: 100, cached_tokens: 0, completion_tokens: 50 },
-    { stage: "answer", elapsed_s: 19.6, cost: { usd: 0.0023, cny: 0.016 }, prompt_tokens: 200, cached_tokens: 128, completion_tokens: 400 },
-  ],
-  tokens: { prompt: 300, cached: 128, completion: 450 },
-  cost: { peak: false, usd: 0.0027, cny: 0.019 },
-  elapsed: { total_s: 20.0, retrieval_s: 0.05, model_s: 20.0 },
-  logged_to: "data/usage_log.jsonl",
-};
+// 视图**不在这手写了**：它由 `tests/_web_fakes.py` 从真实 `ask()` 产物导出（T43 的教训：
+// 手写的夹具写了 `doc_type`、真实视图当时没有这个字段，于是测试全绿而界面错了）。
+// 默认读仓库里那份夹具；pytest 会把"刚生成的那份"的路径作为第一个参数传进来，
+// 所以即使有人忘了重新生成，冒烟测的也是**真数据的形状**。
+const fixturePath = process.argv[2] || new URL("./fixtures/sample_view.json", import.meta.url);
+const view = JSON.parse(readFileSync(fixturePath, "utf8"));
 
 {
   // 照 ask() 的搭法：card 里装着 stepList 与 body，答案都挂在 body 上
@@ -234,17 +192,25 @@ const view = {
   assert.match(text, /低谷价/);
   assert.match(text, /精确可回查/);
   assert.match(text, /编造 1/, "编造的引用数要显示出来");
+  // 编造的引用**要逐条列出来**，不能只给一个计数（T44：只给计数等于"知道有问题、不知道哪条"）
+  assert.match(text, /已从正文里摘掉/, "编造引用要从正文摘掉并单独说明");
+  assert.match(text, /幽灵\.pdf:第 9 页/, "编造的是哪一条必须列出来");
   assert.match(text, /相邻证据/, "缺口题的提示必须出现（首跑后加的）");
   assert.match(text, /候选不足以支撑这一段/, "空段要有说明，不能静默省略");
   assert.match(text, /方法A/);
 
-  // 引用标签：三种 kind 的样式不同
+  // 引用标签：可点的只有**能回查到的**两种（精确 / 只到文件）。
+  // 第三种（unresolved）是服务端的兜底分支，正常数据里**一个都不该有**——
+  // 这条断言本身就是 T44 的回归：早先夹具手写了一条编造引用，让一个走不到的分支看起来是绿的。
   const chips = walk(ctx.card).filter((n) => n.className.startsWith("cite "));
-  assert.equal(chips.length, 3, "三条引用应各有一个可点的标签");
-  const [exactChip, partialChip, ghostChip] = chips;
+  assert.equal(chips.length, 2, "真数据里只该有精确 + 只到文件两种可点引用");
+  const [exactChip, partialChip] = chips;
   assert.ok(!exactChip.className.includes("partial") && !exactChip.className.includes("unresolved"));
   assert.ok(partialChip.className.includes("partial"), "只到文件的引用要有区分");
-  assert.ok(ghostChip.className.includes("unresolved"), "回查不到的引用要标红");
+  assert.ok(
+    !chips.some((n) => n.className.includes("unresolved")),
+    "编造引用不该以可点标签的形式出现在正文里"
+  );
 
   // 点开精确引用 → 展开候选原文全文
   exactChip.click();
@@ -261,14 +227,34 @@ const view = {
   assert.match(textOf(partialChip.parent), /只给了文件名/);
   assert.match(textOf(partialChip.parent), /B 的原文。/);
 
-  // 回查不到 → 明说回查不到，不给原文
-  ghostChip.click();
-  assert.match(textOf(ghostChip.parent), /回查不到原文/);
-
   // 候选清单也要能展开（人工核对用）
   const details = walk(ctx.card).find((n) => n.tagName === "details");
   assert.ok(details, "候选清单应该有个可折叠的块");
   assert.match(textOf(details), /模型看到的候选（2 条/);
+}
+
+// ---- 3b. 兜底分支（**正常数据走不到**）----
+// 服务端会把编造引用从正文里摘掉，所以 `unresolved` 这一支只在异常数据下才触发。
+// 留着它是为了"点不开"时不至于抛异常。这里喂一份**手造**数据把兜底渲染也钉住——
+// 但它证明的是"兜底不会崩"，**不是**"界面会展示编造引用"（T44 就是这么被误读的）。
+{
+  const card = makeEl("div");
+  const body = makeEl("div");
+  card.appendChild(body);
+  const ctx = { card, steps: new Map(), stepList: makeEl("ul"), body };
+  const fake = JSON.parse(JSON.stringify(view));
+  fake.sections["研究现状"][0].citations.push({
+    text: "幽灵.pdf:第 9 页",
+    kind: "unresolved",
+    hit_index: null,
+  });
+
+  app.handleEvent({ type: "result", session_id: "s", turn: 1, data: fake }, ctx);
+
+  const ghost = walk(card).find((n) => n.className.includes("unresolved"));
+  assert.ok(ghost, "兜底分支：unresolved 应渲染成可点标签（而不是让整页崩掉）");
+  ghost.click();
+  assert.match(textOf(ghost.parent), /回查不到/, "点了要说明回查不到，不给原文");
 }
 
 // ---- 4. 端到端：SSE 分帧 → 事件分发 → 渲染 ----

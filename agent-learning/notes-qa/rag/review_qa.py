@@ -35,11 +35,15 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
-from .retriever import DEFAULT_TOP_K, Retriever, SearchHit
+from .retriever import Retriever, SearchHit
 
 # ---- 参数 ----
 REVIEW_SECTIONS = ("研究现状", "方法对比", "结论", "可复用点")
-REVIEW_TOP_K = DEFAULT_TOP_K  # 每轮检索条数
+# 每轮检索条数。**故意与 `DEFAULT_TOP_K` 分开写**（现在数值都是 8，但理由不同）：
+# 这个是"往 prompt 里塞多少候选"的成本参数（真正兜底的是 `REVIEW_MAX_CANDIDATES`），
+# 那个是"检索够不够准"的质量参数。第 20 周的 T31 正是"一个常量被两件事复用"害的
+# ——改一处、另一处跟着变却不知道。所以哪怕数值巧合相等，也不共用同一个名字。
+REVIEW_TOP_K = 8
 REVIEW_MAX_PER_SOURCE = 2  # 同一篇最多几条（治"一篇综述霸榜"，第 20 周实测）
 REVIEW_SNIPPET_CHARS = 600  # 单条候选截断长度
 REVIEW_MAX_CANDIDATES = 10  # 两轮合并后的候选上限（决定 prompt 大小，也就决定成本）
@@ -288,10 +292,16 @@ def validate_citations(
 
     - **精确**：`文件:位置` 与某个候选完全一致 → 可回查到具体页/段；
     - **缺定位**：只写了文件名（或位置对不上）→ 能回查到文件，但还没到页；
-    - **编造**：文件根本不在候选里 → 单独记账，**不静默删掉**（删掉就看不见问题了）。
+    - **编造**：文件根本不在候选里 → **从该条目的引用里摘掉**，单独记账。
 
-    条目保留原样（只把编造引用摘出来），因为"模型没给引用"是**要报告的事实**，
-    不是我们要替它抹平的瑕疵（T28 的教训：别把模型明确排除的东西又悄悄塞回去）。
+    关于"摘掉"（T44 校正了这里的说法）：早先这段注释写的是"不静默删掉"，
+    而代码一直在摘——**两条只能留一条，现在按代码的口径写实**。理由是"摘掉"才对：
+
+    挂在结论上的引用意味着"这条结论有出处"，而编造的出处**不是出处**。
+    留着它反而是把一条捏造的来源当成正经来源陈列（那才是 T28 想防的事）。
+    但**看不见**同样不行，所以它必须满足两个条件：① 进 `citation_invalid` 计数；
+    ② 在报告与界面的"引用校验"区**逐条列出来**（CLI 报告一直有列，界面起初只有计数，
+    已补上）。"看得见"由这两条保证，而不是靠把假引用留在正文里。
     """
     exact_strings = {_canon(citation_of(hit)) for hit in candidates}
     file_strings = {_canon(hit.chunk.source_path) for hit in candidates}

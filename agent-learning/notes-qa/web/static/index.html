@@ -373,6 +373,17 @@ function renderResult(event, ctx) {
   check.appendChild(el("span", "pill", `无引用条目 ${counts.uncited || 0}`));
   ctx.body.appendChild(check);
 
+  // **编造的引用要逐条列出来**（T44）：只给一个计数，等于"知道有问题但不知道哪条有问题"。
+  // 它们**不在正文里**——服务端已经把这类引用从条目不摘了：挂在结论上的引用意味着
+  // "这条结论有出处"，而编造的出处不是出处。所以"看得见"靠这一块，不靠把假引用留在正文。
+  if ((counts.invalid || []).length) {
+    const box = el("div", "warn");
+    box.appendChild(el("div", null,
+      `有 ${counts.invalid.length} 条引用不在模型看到的候选里（属于"编造"档），已从正文里摘掉、单独列在这里：`));
+    for (const text of counts.invalid) box.appendChild(el("div", null, "· " + text));
+    ctx.body.appendChild(box);
+  }
+
   ctx.body.appendChild(candidateBlock(view));
   if (view.logged_to) {
     ctx.body.appendChild(el("div", "meta", "本次已记入使用日志：" + view.logged_to));
@@ -412,9 +423,11 @@ function citeRow(citations, candidates) {
         holder.appendChild(note);
         for (const i of cite.file_hits || []) holder.appendChild(quoteBox(candidates[i]));
       } else {
+        // **兜底分支，正常路径走不到**：编造引用在服务端就从条目不摘掉了（见上面那块列出来的清单）。
+        // 留着它是为了"点不开"时不至于抛异常。T44 的教训：这一支曾经被当成主路径写进了文档
+        // （"红底 = 回查不到，已单独计数但没被删掉"），而它其实一次都没触发过。
         const box = el("div", "quote bad");
-        box.appendChild(el("div", "src", "这条引用不在模型看到的候选里，回查不到原文。"));
-        box.appendChild(el("div", null, "它属于引用校验的“编造”档——已单独计数，但没有被静默删掉。"));
+        box.appendChild(el("div", "src", "这条引用回查不到（不在模型看到的候选里）。"));
         holder.appendChild(box);
       }
     });
