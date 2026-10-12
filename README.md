@@ -34,19 +34,19 @@ python-learning/
 │   ├── 学习进度.md                当前进度（恢复上下文先读它）
 │   ├── 笔记索引.md                每周主题 / 笔记 / 产出对照
 │   ├── 学习评审报告.md             仓库与文档评审（含待办清单）
-│   ├── 工程化改造记录.md           技术债台账（T1~T14）
-│   ├── 第1~14周笔记.md            每周学习笔记
+│   ├── 工程化改造记录.md           技术债台账（T1~T43）
+│   ├── 第1~23周笔记.md            每周学习笔记
 │   ├── 第12周演示稿.md            10 分钟组会汇报底稿
 │   └── notes-qa/                 第 8 周起项目：个人资料问答助手
 │       ├── 项目设计.md
-│       ├── config.py             DeepSeek + SDK 配置
-│       ├── tools.py              list_notes / search_notes / read_note
-│       ├── agent.py              Agent 定义
-│       ├── main.py               交互式命令行入口
-│       ├── eval_cases.py         本地评估（12 单元 + 10 模型）
-│       ├── exp_history_tokens.py T3 会话历史 token 曲线实验
-│       ├── smoke_test.py         环境自检
-│       └── tests/                pytest 用例 + conftest.py
+│       ├── config.py / tools.py / agent.py / main.py   命令行问答（DeepSeek + Agents SDK）
+│       ├── eval_cases.py / exp_history_tokens.py / smoke_test.py  评估 / T3 实验 / 环境自检
+│       ├── constants.py          无依赖共享常量（断开 rag 与 agents 的依赖链）
+│       ├── rag/                  RAG：解析 / 切分 / 向量化 / 索引 / 混合检索 / 重排 / 综述问答
+│       ├── eval/                 抽查集 / 离线对比 / 建库报告 / 第 23 周 Web 验证
+│       ├── web/                  Web 界面（FastAPI + SSE + 单页前端）+ 使用说明（第 23 周）
+│       ├── data/                 语料与索引（不进 Git）
+│       └── tests/                pytest 用例 + conftest.py + 前端冒烟
 └── .venv/                        Python 虚拟环境（不提交）
 ```
 
@@ -58,7 +58,7 @@ python-learning/
 
 ### 1. 准备环境
 
-要求 **Python ≥3.12**（本项目实际使用 3.14.4）。
+要求 **Python ≥3.12**（本项目实际使用 3.13.14）。
 
 ```bash
 uv sync                # 按 uv.lock 安装到 .venv（含 dev 组 pytest / ruff）
@@ -187,7 +187,7 @@ cd agent-learning/notes-qa
 
 ## 技术栈
 
-- Python ≥3.12（实际 3.14.4）
+- Python ≥3.12（实际 3.13.14）
 - [uv](https://docs.astral.sh/uv/)
 - [OpenAI Agents SDK](https://openai.github.io/openai-agents-python/)
 - [DeepSeek API](https://api-docs.deepseek.com/)

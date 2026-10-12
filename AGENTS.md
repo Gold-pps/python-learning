@@ -2,7 +2,7 @@
 
 本文件写给进入本仓库的 AI 助手（Codex 等）。开始工作前请先读这里。
 
-> 最后更新：2026-10-09（第 22 周完成：真实使用 + G3 五条达成；下一步第 23 周，对外可用（Web 界面），G4）
+> 最后更新：2026-10-12（第 23 周完成：Web 界面 + 跨机可用，**G4 五条已具备证据**；下一步第 24 周，G4 验收 + 全阶段复盘）
 
 ## 仓库是什么
 
@@ -13,16 +13,17 @@
 - 模型名统一用 `deepseek-flash`，**不要写 `gpt-*`**；
 - 默认关闭 tracing（`set_tracing_disabled(disabled=True)`），不开 OpenAI 云端追踪；
 - Python 要求 **≥3.12**（`main.py` 的 `asyncio.timeout` 需 3.11+，
-  `eval_cases.py` 的 `Path.is_junction()` 需 3.12+），本机实际使用 3.14.4。
+  `eval_cases.py` 的 `Path.is_junction()` 需 3.12+），本机实际使用 **3.13.14**；
+- 前端冒烟需要 **node**（可选）：没装时 `tests/test_web_frontend.py` 会自动 skip，不算失败。
 
 ## 当前进度
 
 - 第一阶段 12 周已完成（2026-09-13 收尾）；
-- 第二阶段进行中：**第 13~18 周已完成**（G1 已收口，G2 进行中），
-  当前在**第 23 周（对外可用：Web 界面，G4）**；
+- 第二阶段：**第 13~23 周已完成**（G1 已收口、G2 已达成、G3 已达成、**G4 五条已具备证据**），
+  当前准备进**第 24 周（G4 验收 + 全阶段复盘）**；
 - 恢复上下文请先读 `agent-learning/学习进度.md`；
 - 计划与验收标准见 `agent-learning/第二阶段学习规划.md`；
-- 技术债台账见 `agent-learning/工程化改造记录.md`（T1~T19）。
+- 技术债台账见 `agent-learning/工程化改造记录.md`（T1~T43）。
 
 ## 目录结构
 
@@ -45,8 +46,8 @@ python-learning/
 │   ├── 学习进度.md             当前进度（**恢复上下文先读它**）
 │   ├── 笔记索引.md             每周主题 / 笔记 / 产出对照
 │   ├── 学习评审报告.md          2026-09-15 评审 + 处理状态
-│   ├── 工程化改造记录.md        技术债台账（T1~T14）
-│   ├── 第1~14周笔记.md         每周笔记（14 篇）
+│   ├── 工程化改造记录.md        技术债台账（T1~T43）
+│   ├── 第1~23周笔记.md         每周笔记（21 篇；第 15、19 周并入台账 T15/T16/T26~T30）
 │   ├── 第12周演示稿.md         10 分钟组会汇报底稿
 │   ├── .env                   API Key（**不要提交**）
 │   └── notes-qa/              第 8 周起项目：个人资料问答助手
@@ -69,8 +70,14 @@ python-learning/
 │       │   ├── rerank.py      LLM 重排（严格 JSON + 失败降级 + 记账）
 │       │   └── review_qa.py   综述问答（四段式 + JSON Output + 引用校验，第 21 周）
 │       ├── eval/              第 18 周起：抽查集 / 离线对比 / 建库报告 / 综述题与覆盖表
+│       ├── web/               第 23 周起：Web 界面（FastAPI + SSE + 单页前端）
+│       │   ├── server.py      应用 + 启动入口 + 自检（/api/ask 走 SSE 阶段级进度流）
+│       │   ├── service.py     编排：复用 answer_review()，补每步耗时 / 成本 / 引用↔候选
+│       │   ├── pricing.py     成本估算（价格快照 + 峰谷判定 + 缓存命中单价）
+│       │   ├── static/index.html  单页前端（原生 HTML/JS，无框架、无构建、无 CDN）
+│       │   └── 使用说明.md     使用说明 + 能力边界声明 + 数据外发说明
 │       ├── data/             语料与索引（不进 Git）
-│       └── tests/             pytest 用例 + conftest.py
+│       └── tests/             pytest 用例 + conftest.py + 前端冒烟（frontend_smoke.mjs）
 └── .venv/                     Python 虚拟环境（不提交）
 ```
 
@@ -86,8 +93,18 @@ uv sync                # 按 uv.lock 安装到 .venv（含 dev 组 pytest / ruff
 uv sync --no-dev       # 只要运行依赖
 
 # 测试与检查（仓库根）
-uv run pytest -q       # 163 passed, 1 skipped（skip 是 Windows 非管理员平台限制）
+uv run pytest -q       # 220 passed, 1 skipped（skip 是 Windows 非管理员平台限制）
 uv run ruff check .    # All checks passed
+
+# 前端 DOM 冒烟（第 23 周起；不联网、不花钱；没装 node 时 pytest 里会自动 skip）
+# 它把 index.html 的内联脚本放进迷你 DOM 里跑：进度条渲染、引用点开看原文、SSE 分帧到渲染
+node agent-learning/notes-qa/tests/frontend_smoke.mjs
+
+# Web 界面（第 23 周起；在 agent-learning/notes-qa 下；界面本身不花钱，提问才花 token）
+uv run python -m web.server --check                  # 自检：索引三件套 / fastembed / .env
+uv run python -m web.server                          # 本机 http://127.0.0.1:8000
+uv run python -m web.server --host 0.0.0.0 --token "notes-qa-2026"   # 局域网；非回环必须给口令
+# 口令**只能可见 ASCII**：HTTP 头按 ISO-8859-1 传，中文口令会让浏览器直接拒绝发请求（台账 T40）
 # RAG 环境（独立 .venv-rag，需 torch；在 agent-learning/notes-qa 下）
 # Windows：
 & "..\..\.venv-rag\Scripts\python.exe" -m rag.index build
@@ -136,6 +153,14 @@ uv run python eval_cases.py --unit-only   # 只跑单元测试（无需网络）
 - **无答案题的关键词不能写进 `agent-learning/*.md`**——那等于把答案卡交给被检索的 Agent
   （台账 T8"发现一"）。题库与答案卡只写在 `notes-qa/` 内（该目录已在 `EXCLUDE_DIRS` 中）。
 
+- **Web 层的改动必须同时跑前端冒烟**：`node agent-learning/notes-qa/tests/frontend_smoke.mjs`。
+  这层没有构建步骤，冒烟是唯一能挡住"后端全绿、界面没画出来"的网
+  （第 23 周同一块功能连坏两次，T37/T39）。改 `index.html` 里用到的字段时，
+  **夹具要与真实数据字段一致**——T43 就是夹具里手写了 `doc_type`、真数据没有它，测试全绿而界面错；
+- **界面上的话不许说"做了但实际没做"的事**：横幅/计数这类展示字段必须来自计算结果，
+  不能由"开关开着"推断（T41：界面说"带上了上一问"，日志里根本没拼）；
+- **给使用者的示例必须能直接用**：口令、URL、命令都会被原样照抄，
+  中文占位符害过一次（T40：HTTP 头按 ISO-8859-1 传，中文口令让请求发不出去）；
 - **Windows 上开发**：命令用 PowerShell，超过三行的脚本写成临时 `.py` 文件再跑
   （`python -c "长字符串"` 的引号会被 PowerShell 吃掉）；
 - **跑 pytest 需要管理员权限**（或开 Windows 开发者模式）：普通用户建不了文件符号链接，
