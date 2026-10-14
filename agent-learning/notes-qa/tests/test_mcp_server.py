@@ -341,19 +341,25 @@ def test_get_retriever_really_loads_an_index(tmp_path, monkeypatch):
     assert mcp.get_retriever() is retriever, "第二次调用应当命中缓存（模型只加载一次）"
 
 
-def test_default_index_path_does_not_depend_on_cwd(monkeypatch):
+def test_default_index_path_does_not_depend_on_cwd(monkeypatch, tmp_path):
     """默认索引位置**按模块算，不看 cwd**——MCP server 是被客户端拉起的，cwd 不由我们决定。
 
-    早先写的是相对路径 `data/index`：从仓库根跑就去找 `python-learning/data/index`（不存在），
+    早先写的是相对路径 `data/index`：从别处跑就去找 `<cwd>/data/index`（不存在），
     报"索引不可用"，而真索引就在旁边（台账 T48）。
+
+    **不要断言它存在**（第一版就是这么写的，本地绿、CI 红，台账 T51）：
+    `data/` 是本地语料与索引、在 `.gitignore` 里，CI 上根本没有。
+    这条要证明的是"跟 cwd 无关"——那就**换个 cwd 再问一次**，而不是去戳磁盘。
     """
     monkeypatch.delenv("NOTES_QA_INDEX", raising=False)
+    before = mcp.index_dir_from_env()
 
-    path = mcp.index_dir_from_env()
+    monkeypatch.chdir(tmp_path)  # 随便换到别处
+    after = mcp.index_dir_from_env()
 
-    assert path.is_absolute()
-    assert path.parts[-3:] == ("notes-qa", "data", "index")
-    assert path.exists(), "默认位置应当真是本项目的索引目录"
+    assert after == before, "换 cwd 不该改变默认索引位置"
+    assert after.is_absolute()
+    assert after.parts[-3:] == ("notes-qa", "data", "index")
 
 
 def test_null_optional_arguments_are_rejected_by_the_protocol_layer():
