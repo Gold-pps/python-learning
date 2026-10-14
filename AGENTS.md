@@ -79,6 +79,9 @@ python-learning/
 │       │   ├── pricing.py     成本估算（价格快照 + 峰谷判定 + 缓存命中单价）
 │       │   ├── static/index.html  单页前端（原生 HTML/JS，无框架、无构建、无 CDN）
 │       │   └── 使用说明.md     使用说明 + 能力边界声明 + 数据外发说明
+│       ├── mcp_server/        MCP server（第三阶段 H2）：search_corpus / read_chunk / review_question
+│       │   ├── server.py      三个工具 + 成本闸门（review_question 默认关）+ stdio 入口 + --check
+│       │   └── README.md      怎么跑、怎么接进 Codex、四条踩过的约束
 │       ├── data/             语料与索引（不进 Git）
 │       └── tests/             pytest 用例 + conftest.py + 前端冒烟（frontend_smoke.mjs）
 └── .venv/                     Python 虚拟环境（不提交）
@@ -108,6 +111,13 @@ uv run python -m web.server --check                  # 自检：索引三件套 
 uv run python -m web.server                          # 本机 http://127.0.0.1:8000
 uv run python -m web.server --host 0.0.0.0 --token "notes-qa-2026"   # 局域网；非回环必须给口令
 # 口令**只能可见 ASCII**：HTTP 头按 ISO-8859-1 传，中文口令会让浏览器直接拒绝发请求（台账 T40）
+
+# MCP server（第三阶段 H2；在 agent-learning/notes-qa 下；stdio，不占端口、不出网络）
+uv run python -m mcp_server --check      # 自检：索引三件套 / 成本闸门 / 工具清单（不加载模型）
+uv run python -m mcp_server              # stdio 启动（由 MCP 客户端当子进程拉起）
+# 会花钱的 review_question 默认关：$env:NOTES_QA_MCP_ALLOW_SPEND = "1" 才开（单进程上限 5 次）
+# 注意 mcp 2.x 已把 FastMCP 改名成 MCPServer（from mcp.server.mcpserver import MCPServer），
+# 网上多数教程还是 1.x 写法，照抄会 ModuleNotFoundError；接线方法见 mcp_server/README.md
 # RAG 环境（独立 .venv-rag，需 torch；在 agent-learning/notes-qa 下）
 # Windows：
 & "..\..\.venv-rag\Scripts\python.exe" -m rag.index build

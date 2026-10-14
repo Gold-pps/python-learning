@@ -75,6 +75,20 @@ class FakeRetriever:
         hits = self.table.get(query)
         return list(hits if hits is not None else self.fallback)
 
+    @property
+    def chunks(self):
+        """真实 `Retriever` 有这个属性（MCP 的 `read_chunk` 靠它按 `文件:位置` 反查原文）。
+
+        **从预设命中里派生**，不手写一份：假件与真实接口不一致的代价已经付过两次
+        （T43 少 `doc_type`、T44 走不到的分支），能派生就别抄。
+
+        注意**不去重**：真实索引里同一个 `(文件, 位置)` 会有多个片段（PDF 一页常切 4~5 段），
+        假件若顺手去重，就再也测不出"只返回了一段、其余被丢掉"这类问题（T49）。
+        """
+        return [
+            hit.chunk for hits in [*self.table.values(), self.fallback] for hit in hits
+        ]
+
 
 def plan_reply(enough=True, gaps=(), follows=()) -> str:
     return json.dumps(
