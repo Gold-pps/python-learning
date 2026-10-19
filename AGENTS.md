@@ -77,6 +77,7 @@ python-learning/
 │       │   ├── server.py      应用 + 启动入口 + 自检（/api/ask 走 SSE 阶段级进度流）
 │       │   ├── service.py     编排：复用 answer_review()，补每步耗时 / 成本 / 引用↔候选
 │       │   ├── pricing.py     成本估算（价格快照 + 峰谷判定 + 缓存命中单价）
+│       │   ├── audit.py       H3：核对清单生成器（把一次问答转成"结论 + 原文 + 支持吗"的清单）
 │       │   ├── static/index.html  单页前端（原生 HTML/JS，无框架、无构建、无 CDN）
 │       │   └── 使用说明.md     使用说明 + 能力边界声明 + 数据外发说明
 │       ├── mcp_server/        MCP server（第三阶段 H2）：search_corpus / read_chunk / review_question
@@ -118,6 +119,12 @@ uv run python -m mcp_server              # stdio 启动（由 MCP 客户端当�
 # 会花钱的 review_question 默认关：$env:NOTES_QA_MCP_ALLOW_SPEND = "1" 才开（单进程上限 5 次）
 # 注意 mcp 2.x 已把 FastMCP 改名成 MCPServer（from mcp.server.mcpserver import MCPServer），
 # 网上多数教程还是 1.x 写法，照抄会 ModuleNotFoundError；接线方法见 mcp_server/README.md
+
+# 核对清单（第三阶段 H3；在 agent-learning/notes-qa 下）
+uv run python -m web.audit --view tests/fixtures/sample_view.json   # 离线、免费：从视图 JSON 生成
+# 现场跑一次问答再生成（**会花钱** 2~7 分；顺手把视图 JSON 留档，之后重生成不必再花钱）
+uv run python -m web.audit --ask "刀具磨损监测有哪些主流方法？" --out eval/核对清单-刀具.md
+# 它只问"原文有没有这么说"——不判断专业对错，所以非本领域的人也能核（见 web/audit.py 的说明）
 # RAG 环境（独立 .venv-rag，需 torch；在 agent-learning/notes-qa 下）
 # Windows：
 & "..\..\.venv-rag\Scripts\python.exe" -m rag.index build

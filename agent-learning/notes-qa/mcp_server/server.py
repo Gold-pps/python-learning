@@ -537,7 +537,20 @@ def main(argv: list[str] | None = None) -> int:
 
     parser = argparse.ArgumentParser(description="notes-qa 的 MCP server（stdio）")
     parser.add_argument("--check", action="store_true", help="只自检并退出")
+    parser.add_argument(
+        "--allow-spend",
+        action="store_true",
+        help=(
+            f"开启会花钱的 review_question（等价于环境变量 {SPEND_ENV}=1）。"
+            "MCP 客户端的配置里未必支持 env 键，所以留了这个开关——把闸门写进 args 更直白"
+        ),
+    )
     args = parser.parse_args(argv)
+
+    if args.allow_spend:
+        # 设成环境变量而不是另走一条分支：`spend_allowed()` 只有这一个判据，
+        # 两处判断必然漂移（T41 的教训）
+        os.environ[SPEND_ENV] = "1"
 
     if args.check:
         index_dir = index_dir_from_env()

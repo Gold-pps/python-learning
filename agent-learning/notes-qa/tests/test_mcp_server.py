@@ -415,6 +415,21 @@ def test_argument_coercion_falls_back_instead_of_raising():
     assert mcp._positive_int("abc", 8) == 8
 
 
+def test_allow_spend_flag_opens_the_gate(monkeypatch, capsys):
+    """`--allow-spend` 与设环境变量等价——MCP 客户端配置里未必支持 `env` 键，所以要有个开关。
+
+    它只是**把同一个环境变量设上**（不给 `spend_allowed()` 添第二条判据）：
+    两处判断必然漂移，这是 T41 的教训。
+    """
+    monkeypatch.delenv(mcp.SPEND_ENV, raising=False)
+
+    assert mcp.main(["--check"]) == 0
+    assert json.loads(capsys.readouterr().out)["spend"]["allowed"] is False
+
+    assert mcp.main(["--check", "--allow-spend"]) == 0
+    assert json.loads(capsys.readouterr().out)["spend"]["allowed"] is True
+
+
 def test_stdio_handshake_lists_the_three_tools():
     """真起一个子进程走 stdio：`initialize` → `tools/list`。
 

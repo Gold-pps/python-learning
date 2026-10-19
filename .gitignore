@@ -36,3 +36,8 @@ python-base/
 
 # RAG 数据与索引（不进 Git；语料自备，索引可重建）
 agent-learning/notes-qa/data/
+
+# 临时脚本（人或者别的 Agent 留下的试验文件，用完即删——第 32 周 Codex 调 MCP 时就留了一个
+# `_tmp_search_corpus.py` 在仓库里，自己标着"用完即删"却没删）
+tmp_*.py
+_tmp_*.py
