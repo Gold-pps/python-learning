@@ -84,6 +84,136 @@ def test_degraded_and_insufficient_are_surfaced_at_the_top():
     assert "模型自己声明资料不足以回答" in text and "资料中没有直接答案" in text
 
 
+def test_hard_fact_gaps_flags_numbers_missing_from_the_cited_text():
+    """结论里的**数字 / 型号**若不在它引用的原文里，要分档提示：转引 vs 全都没有。
+
+    这是第二版信号。第一版拿“实词是否出现”做，**42/46 条全被标** = 噪声——
+    结论是对原文的压缩改写，用词本来就不一样（台账 T52）。
+    """
+    from web.audit import hard_fact_gaps
+
+    def item(point: str) -> dict:
+        return {
+            "point": point,
+            "citations": [{"text": "a.pdf:第 1 页", "kind": "exact", "hit_index": 0}],
+        }
+
+    view = {
+        "sections": {
+            "结论": [
+                item("本方法把误差降低 12.3%"),  # 数字就在引用的原文里
+                item("该方案把误差降低 68.5%"),  # 数字在**别的**候选里
+                item("另一处降到 103.9 μm"),  # 数字哪儿都没有
+            ],
+            "研究现状": [],
+            "方法对比": [],
+            "可复用点": [],
+        },
+        "candidates": [
+            {"text": "实验表明本方法把误差降低 12.3%。"},
+            {"text": "另一篇里提到降低 68.5% 的效果。"},
+        ],
+    }
+
+    gaps = hard_fact_gaps(view)
+
+    assert gaps[0]["missing"] == [], "数字就在引用的原文里，不该被标"
+    assert gaps[1]["missing"][0]["fact"] == "68.5"
+    assert gaps[1]["missing"][0]["elsewhere"] == [1], "出现在别的候选 → 引用挂错"
+    assert gaps[2]["missing"][0]["fact"] == "103.9"
+    assert gaps[2]["missing"][0]["elsewhere"] == [], "所有候选里都没有 → 只能记无法判断"
+
+
+def test_hard_fact_gaps_tells_same_page_apart_from_wrong_reference():
+    """同一个 `文件:位置` 的另一段 ≠ 引用挂错（T53）。
+
+    引用是**页级**的，而一页常被切成好几段（T49）。所以"数在另一个候选里"要分两种：
+    那个候选与引用**同一页** → 读者照着引用照样查得到，只是片段没挂准；
+    **别的文件/页** → 那才是真的挂错。
+    """
+    from web.audit import hard_fact_gaps
+
+    def candidate(locator: str, text: str) -> dict:
+        return {"source_path": "a.pdf", "locator": locator, "text": text}
+
+    view = {
+        "sections": {
+            "结论": [
+                {
+                    "point": "误差降低 68.5%",
+                    "citations": [
+                        {"text": "a.pdf:第 2 页", "kind": "exact", "hit_index": 0}
+                    ],
+                }
+            ],
+            "研究现状": [],
+            "方法对比": [],
+            "可复用点": [],
+        },
+        "candidates": [
+            candidate("第 2 页", "同一页的另一段，没有那个数。"),  # [0] 被引用
+            candidate("第 2 页", "同页另一段：降低了 68.5%。"),  # [1] 同页
+            candidate("第 9 页", "别的页：也提到 68.5%。"),  # [2] 别的页
+        ],
+    }
+
+    flagged = hard_fact_gaps(view)[0]["missing"][0]
+
+    assert flagged["fact"] == "68.5"
+    assert flagged["elsewhere"] == [1, 2]
+    assert flagged["same_place"] == [1], "同页那一支是可接受的（引用仍可回查）"
+
+
+def test_hard_fact_gaps_ignores_citation_markers():
+    """结论里“候选[5]”那类标记是引用序号、不是数字——第一版就是被它误抓的。"""
+    from web.audit import hard_fact_gaps
+
+    view = {
+        "sections": {
+            "研究现状": [
+                {
+                    "point": "候选[5]提到强化学习调度智能体",
+                    "citations": [
+                        {"text": "a:第 1 页", "kind": "exact", "hit_index": 0}
+                    ],
+                }
+            ],
+            "方法对比": [],
+            "结论": [],
+            "可复用点": [],
+        },
+        "candidates": [{"text": "这里的智能体指强化学习调度智能体。"}],
+    }
+
+    assert hard_fact_gaps(view)[0]["missing"] == []
+
+
+def test_checklist_points_to_the_few_items_worth_reading_first():
+    """清单顶部要给出“最值得先看”的几条——否则没人会从头核几十条。"""
+    view = {
+        "sections": {
+            "结论": [
+                {
+                    "point": "该方案把误差降低 68.5%",
+                    "citations": [
+                        {"text": "a.pdf:第 1 页", "kind": "exact", "hit_index": 0}
+                    ],
+                }
+            ],
+            "研究现状": [],
+            "方法对比": [],
+            "可复用点": [],
+        },
+        "candidates": [{"text": "与数值无关的一段原文。"}],
+    }
+
+    text = build_checklist(view)
+
+    assert "最值得先看" in text
+    assert "数字或型号" in text, "要说清为什么挑这几条"
+    assert "候选片段里都没有" in text
+
+
 def test_cli_generates_from_a_view_file_without_spending(tmp_path):
     """`--view` 这条路径不跑模型：一条命令把视图 JSON 变成清单文件。"""
     out = tmp_path / "核对清单.md"
@@ -127,3 +257,18 @@ def test_cli_refuses_when_neither_input_is_given():
     )
 
     assert proc.returncode == 2, "argparse 的用法错误应当是 2"
+
+
+def test_hard_fact_gaps_marks_items_without_any_citable_source():
+    """一条引用都没挂的条目没有可核原文——同样要挑出来。"""
+    from web.audit import hard_fact_gaps
+
+    view = {
+        "sections": {"结论": [{"point": "天马行空的结论", "citations": []}]},
+        "candidates": [],
+    }
+
+    gaps = hard_fact_gaps(view)
+
+    assert gaps[0]["no_source"] is True
+    assert gaps[0]["missing"] == []

@@ -460,3 +460,68 @@ def test_append_log_appends_jsonl(tmp_path):
 
     lines = path.read_text(encoding="utf-8").splitlines()
     assert [json.loads(line)["a"] for line in lines] == [1, 2]
+
+
+# ---- 硬事实核对（H3 / T52）----
+
+
+def _hard_fact_hit(path: str, locator: str, text: str):
+    from rag.chunk import Chunk
+    from rag.retriever import SearchHit
+
+    chunk = Chunk.create(
+        source_path=path, doc_type="pdf", locator=locator, start=1, end=1, text=text
+    )
+    return SearchHit(chunk=chunk, score=0.03, dense_rank=1, sparse_rank=1)
+
+
+def _hard_fact_payload(point: str, citation: str) -> dict:
+    payload: dict = {key: [] for key in ("研究现状", "方法对比", "结论", "可复用点")}
+    payload["研究现状"] = [{"point": point, "citations": [citation]}]
+    payload["insufficient"] = False
+    payload["note"] = ""
+    return payload
+
+
+def test_unsupported_facts_flags_numbers_missing_from_the_cited_chunk():
+    """结论里的数值若不在**它自己引用**的那段里，要单独记账（H3 / T52）。
+
+    与"编造引用"的区别：引用本身是真的（候选里就有这条），只是那条原文**没说过这个数**——
+    模型可能凭自己的知识补的，于是核对着**没法从原文核**。这正是它该被单独列出来的原因。
+    """
+    from rag.review_qa import unsupported_facts
+
+    hit = _hard_fact_hit("a.pdf", "第 2 页", "本方法把综合误差降低 12.3%，效果明显。")
+
+    ok = unsupported_facts(
+        _hard_fact_payload("综合误差降低 12.3%", "a.pdf:第 2 页"), [hit]
+    )
+    assert ok == [], "12.3 就在它引用的原文里"
+
+    bad = unsupported_facts(
+        _hard_fact_payload("综合误差降低 68.5%", "a.pdf:第 2 页"), [hit]
+    )
+    assert bad and "68.5" in bad[0]
+    assert "a.pdf:第 2 页" in bad[0], "要带上它引用的位置，便于回查"
+
+
+def test_unsupported_facts_ignores_citation_markers():
+    """「候选[5]」里的 5 是引用序号，不是结论里的数值——第一版就是被它误抓的。"""
+    from rag.review_qa import unsupported_facts
+
+    hit = _hard_fact_hit("a.pdf", "第 2 页", "强化学习调度智能体。")
+
+    assert (
+        unsupported_facts(
+            _hard_fact_payload("候选[5]提到强化学习调度智能体", "a.pdf:第 2 页"), [hit]
+        )
+        == []
+    )
+
+
+def test_hard_facts_takes_numbers_and_identifiers_only():
+    """硬事实 = 数字（含小数）与英文标识符；纯文字句子不该被当成可疑。"""
+    from rag.review_qa import hard_facts
+
+    assert hard_facts("误差降低 32.61%，在 VMC850 上验证") == ["32.61", "VMC850"]
+    assert hard_facts("没有数字的一句话") == []

@@ -31,6 +31,7 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -116,7 +117,10 @@ ANSWER_PROMPT = """你是科研资料综述助手。依据给定的候选片段�
    例如 {{"citations": ["刀具磨损监测/某篇.pdf:第 4 页"]}}——不许自己编页码，也不许引用候选之外的文献；
 5. 候选不足以支撑某一段时，那一段给空数组，把 `insufficient` 置为 true，
    并在 `note` 里写清"资料中没有……"；**禁止跨主题拼凑**；
-6. 只输出一个 json 对象，不要解释、不要输出思考过程。
+6. **数值与型号必须原样来自你引用的那个片段**：百分比、量值、机床型号、算法缩写都一样。
+   原文没给数，就别写数（可以写"显著降低"）；**不许把 A 片段的数值挂到 B 片段的结论上**。
+   这一条会被代码核对：结论里的数字若不在你引用的片段里，会单独记成"硬事实待核"；
+7. 只输出一个 json 对象，不要解释、不要输出思考过程。
 
 输出格式：
 {{"研究现状": [], "方法对比": [], "结论": [], "可复用点": [], "insufficient": false, "note": ""}}
@@ -154,6 +158,8 @@ class ReviewResult:
     citation_partial: int = 0
     citation_invalid: list[str] = field(default_factory=list)
     uncited_points: int = 0
+    # 结论里出现、但在**它自己引用的候选片段**里找不到的数值/型号（H3 的硬事实核对）
+    unsupported_facts: list[str] = field(default_factory=list)
     thinking_recommended: bool = False
 
 
@@ -338,6 +344,114 @@ def validate_citations(
     return cleaned, exact, partial, list(dict.fromkeys(invalid)), uncited
 
 
+# ---- 硬事实核对（H3）----
+#
+# "硬事实" = 数字（含小数）与英文标识符（型号 / 缩写）。**它们能被精确核对**，
+# 也最容易出错（把方法 A 的数值安到方法 B 上）。
+#
+# 为什么不用"实词是否出现"：第一版就是那么做的，**42/46 条全被标** = 噪声——
+# 结论是对原文的压缩改写，用词天然不重合（台账 T52）。
+HARD_FACT_PATTERN = re.compile(r"[A-Za-z]{2,}[A-Za-z0-9]*|\d+(?:\.\d+)?")
+_CITATION_MARK = re.compile(r"\[\d+\]")
+
+
+def hard_facts(text: str) -> list[str]:
+    """取一句话里的硬事实（数字 / 英文标识符），去重保序。
+
+    先把「候选[5]」这类引用标记剔掉——它不是结论里的数值，第一版就是被它误抓的。
+    """
+    cleaned = _CITATION_MARK.sub(" ", text or "")
+    return list(dict.fromkeys(HARD_FACT_PATTERN.findall(cleaned)))
+
+
+def _candidate_text(candidate) -> str:
+    """候选的原文：web 层是 dict、review_qa 里是 SearchHit——两种都认。"""
+    if isinstance(candidate, dict):
+        return candidate.get("text") or ""
+    return getattr(getattr(candidate, "chunk", None), "text", "") or ""
+
+
+def _candidate_label(candidate) -> str:
+    """候选的 `文件:位置` 写法（dict 与 SearchHit 都认）。"""
+    if isinstance(candidate, dict):
+        return candidate.get("citation") or ""
+    return citation_of(candidate)
+
+
+def _cited_text(item: dict, candidates: list) -> str:
+    """该条目引用的原文（拼起来）。
+
+    两种引用形态都要认：**校验前**是字符串（`文件:位置`，按文字去找候选），
+    **校验后**是 dict（带 `hit_index` / `file_hits`，直接按下标取）。
+    第一版只写了后一种，一跑就 AttributeError（`str.get`）——测试当场抓到。
+    """
+    texts: list[str] = []
+    for cite in item.get("citations") or []:
+        if isinstance(cite, dict):
+            index = cite.get("hit_index")
+            if isinstance(index, int) and 0 <= index < len(candidates):
+                texts.append(_candidate_text(candidates[index]))
+            for file_index in cite.get("file_hits") or []:
+                if isinstance(file_index, int) and 0 <= file_index < len(candidates):
+                    texts.append(_candidate_text(candidates[file_index]))
+            continue
+        wanted = str(cite).strip().strip("[]")
+        for candidate in candidates:
+            if _candidate_label(candidate) == wanted:
+                texts.append(_candidate_text(candidate))
+                break
+    return "\n".join(texts)
+
+
+def unsupported_facts(payload: dict, candidates: list) -> list[str]:
+    """结论里出现、但**在它自己引用的候选片段里找不到**的硬事实。
+
+    只跟"它引用的那条"比，不跟全部候选比：结论挂的是那条引用，就该由那条原文支持
+    （数值出现在**别的**候选里 = 引用挂错了，`web/audit.py` 会把这两档分开显示）。
+
+    返回形如 `103.9（某某.pdf:第 8 页）` 的字符串，便于直接进日志与报告。
+
+    **这不是"判错"**：模型可能凭自己的知识补了数值。它的作用是让人知道
+    **这一条没法从原文核**——H3 那句"非本领域的人也能核"就落在这上面。
+    """
+    out: list[str] = []
+    for key in REVIEW_SECTIONS:
+        for item in payload.get(key) or []:
+            if not isinstance(item, dict):
+                continue
+            claim = " ".join(
+                filter(
+                    None,
+                    [
+                        item.get("point") or "",
+                        item.get("pros") or "",
+                        item.get("cons") or "",
+                    ],
+                )
+            )
+            facts = hard_facts(claim)
+            if not facts:
+                continue
+            cited = _cited_text(item, candidates).casefold()
+            citation = (
+                "、".join(
+                    (
+                        cite.get("text", "")
+                        if isinstance(cite, dict)
+                        else str(cite).strip().strip("[]")
+                    )
+                    for cite in item.get("citations") or []
+                ).strip()
+                or "（无引用）"
+            )
+            out.extend(
+                f"{fact}（{citation}）"
+                for fact in facts
+                if fact.casefold() not in cited
+            )
+    return out
+
+
 # ---- 主流程 ----
 
 
@@ -496,10 +610,14 @@ def answer_review(
     result.citation_partial = partial
     result.citation_invalid = invalid
     result.uncited_points = uncited
+    result.unsupported_facts = unsupported_facts(payload, result.candidates)
     result.reason = (
         f"四段式回答已产出；引用：精确 {exact}、缺定位 {partial}、"
         f"编造 {len(invalid)}；无引用条目 {uncited}"
     )
+    if result.unsupported_facts:
+        # 单列一项、不混进"编造"：引用确实是候选里那条，只是**结论里的数值/型号**不在其中
+        result.reason += f"；硬事实待核 {len(result.unsupported_facts)} 项"
     return result
 
 
@@ -539,6 +657,8 @@ def build_log_record(
         "citation_partial": result.citation_partial,
         "citation_invalid": result.citation_invalid,
         "uncited_points": result.uncited_points,
+        # H3 的硬事实核对：结论里的数值/型号没出现在它引用的片段里（不是"编造"，是"核不了"）
+        "unsupported_facts": result.unsupported_facts,
         "thinking_recommended": result.thinking_recommended,
         "adopted": None,  # 使用者的评价：true / false
         "note": "",  # 为什么帮上忙 / 帮倒忙

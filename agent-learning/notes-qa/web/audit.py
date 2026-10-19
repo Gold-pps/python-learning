@@ -29,6 +29,7 @@ uv run python -m web.audit --ask "刀具磨损监测有哪些主流方法？" --
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 from rag.review_qa import REVIEW_SECTIONS
@@ -84,9 +85,116 @@ def _quote_lines(cite: dict, candidates: list) -> list[str]:
     return lines
 
 
+# "硬事实" = 数字（含小数）与英文标识符（型号 / 缩写）。它们**能被精确核对**，
+# 也最容易出错（把方法 A 的数值安到方法 B 上）。
+#
+# 为什么不用"实词是否出现"：第一版就是拿实词做的，**42/46 条全被标** = 噪声——
+# 结论是对原文的**压缩改写**，用词本来就不一样，重合率天然低（台账 T52）。
+_HARD_FACT = re.compile(r"[A-Za-z]{2,}[A-Za-z0-9]*|\d+(?:\.\d+)?")
+_CITATION_MARK = re.compile(r"\[\d+\]")  # 结论里「候选[5]」这类标记，别当成数字抓
+
+
+def _cited_text(item: dict, candidates: list) -> str:
+    """该条目引用的原文（拼起来）。只认 exact 的 hit 与 partial 的 file_hits。"""
+    texts: list[str] = []
+    for cite in item.get("citations") or []:
+        index = cite.get("hit_index")
+        if (
+            cite.get("kind") == "exact"
+            and isinstance(index, int)
+            and index < len(candidates)
+        ):
+            texts.append(candidates[index].get("text") or "")
+        for file_index in cite.get("file_hits") or []:
+            if isinstance(file_index, int) and file_index < len(candidates):
+                texts.append(candidates[file_index].get("text") or "")
+    return "\n".join(texts)
+
+
+def hard_fact_gaps(view: dict) -> list[dict]:
+    """逐条结论核**硬事实**：结论里的数字 / 英文型号，是否出现在它引用的原文里。
+
+    两档提示，都是"该看什么"，不是判断：
+
+    - **出现在别的候选里** → 数值对得上、但**引用挂错了**（把 B 的出处挂在 A 上）；
+    - **这次问答的所有候选里都没有** → **依据不在原文里**（模型可能凭记忆补的），
+      核对着只能记"无法判断"——它不等于错，但**没法从原文核**。
+
+    `AI` 这类词也会被列出来，属于第二种情况的特例：缺口题里结论在讨论"AI 辅助工艺编制"，
+    而引用的都是数控论文——**它恰好暴露"答的不是这个问题"**，不是缺陷。
+
+    返回与 `_rows()` **同序**的列表：`{section, point, missing: [{fact, elsewhere}], no_source}`。
+    """
+    candidates = view.get("candidates") or []
+    report: list[dict] = []
+    for section, item in _rows(view):
+        cited = _cited_text(item, candidates)
+        claim = _CITATION_MARK.sub(
+            " ",
+            " ".join(
+                filter(
+                    None,
+                    [
+                        item.get("point") or "",
+                        item.get("pros") or "",
+                        item.get("cons") or "",
+                    ],
+                )
+            ),
+        )
+        # 该条目引用的 `文件:位置`。**这一档很关键**：引用是页级的，
+        # 同一页常常被切成好几段（T49），所以"数在另一个候选里"未必是挂错——
+        # 只要那个候选与引用**同一文件同一位置**，读者照着引用照样查得到（T53）。
+        cited_texts = {
+            str(cite.get("text") or "").strip()
+            for cite in item.get("citations") or []
+            if isinstance(cite, dict)
+        }
+        cited_places = {
+            f"{candidate.get('source_path')}:{candidate.get('locator')}"
+            for candidate in candidates
+            if f"{candidate.get('source_path')}:{candidate.get('locator')}"
+            in cited_texts
+        }
+        facts = list(dict.fromkeys(_HARD_FACT.findall(claim)))
+        missing: list[dict] = []
+        for fact in facts:
+            needle = fact.casefold()
+            if needle in cited.casefold():
+                continue
+            elsewhere = [
+                index
+                for index, candidate in enumerate(candidates)
+                if needle in (candidate.get("text") or "").casefold()
+            ]
+            same_place = [
+                index
+                for index in elsewhere
+                if f"{candidates[index].get('source_path')}:{candidates[index].get('locator')}"
+                in cited_places
+            ]
+            missing.append(
+                {
+                    "fact": fact,
+                    "elsewhere": elsewhere,
+                    "same_place": same_place,
+                }
+            )
+        report.append(
+            {
+                "section": section,
+                "point": item.get("point") or "",
+                "missing": missing,
+                "no_source": not cited.strip(),
+            }
+        )
+    return report
+
+
 def build_checklist(view: dict, *, source: str = "") -> str:
     """把视图转成核对清单（Markdown）。纯函数：不联网、不花钱、可离线测。"""
     rows = _rows(view)
+    gaps = hard_fact_gaps(view)
     candidates = view.get("candidates") or []
     counts = view.get("citations") or {}
     elapsed = view.get("elapsed") or {}
@@ -123,6 +231,28 @@ def build_checklist(view: dict, *, source: str = "") -> str:
             f"{view.get('note') or ''}"
         )
     out.append(f"- 待核对结论数：**{len(rows)}**")
+    suspects = sorted(
+        (
+            (len(gap["missing"]), number)
+            for number, gap in enumerate(gaps, start=1)
+            if gap.get("missing")
+        ),
+        key=lambda pair: (-pair[0], pair[1]),
+    )[:5]
+    if suspects:
+        listed = "、".join(
+            f"第 {number} 条（{count} 项）" for count, number in suspects
+        )
+        out.append(
+            f"- **最值得先看**：{listed}——这些条目的结论里有**数字或型号**在它引用的原文里找不到"
+            "（“把 A 的数值安到 B 上”那类错最容易在这里露出来）。"
+            "**只挑这几条对着原文看一眼**，比几十条全过一遍有效"
+        )
+    unsourced = [
+        number for number, gap in enumerate(gaps, start=1) if gap.get("no_source")
+    ]
+    if unsourced:
+        out.append(f"- ⚠️ 没有可核原文的条目：第 {'、'.join(map(str, unsourced))} 条")
     out.append("")
 
     invalid = counts.get("invalid") or []
@@ -149,6 +279,30 @@ def build_checklist(view: dict, *, source: str = "") -> str:
             out.append("- 引用：（这条结论**一条引用都没挂**——无引用条目，重点看）")
         for cite in citations:
             out.extend(_quote_lines(cite, candidates))
+        gap = gaps[number - 1] if number - 1 < len(gaps) else {}
+        for flagged in gap.get("missing") or []:
+            fact = flagged.get("fact", "")
+            elsewhere = flagged.get("elsewhere") or []
+            same_place = flagged.get("same_place") or []
+            if same_place:
+                out.append(
+                    f"- ⚠️ 硬事实核对：`{fact}` **在它引用的同一页的另一段里**"
+                    f"（第 {'、'.join(map(str, same_place))} 条）——引用仍可回查，"
+                    "只是模型没把这一段挂准（T53）"
+                )
+            elif elsewhere:
+                out.append(
+                    f"- ⚠️ 硬事实核对：`{fact}` **出现在别的文件/页的候选里**"
+                    f"（第 {'、'.join(map(str, elsewhere))} 条）——**引用挂错了**"
+                )
+            else:
+                out.append(
+                    f"- ⚠️ 硬事实核对：`{fact}` **模型这次看到的候选片段里都没有**"
+                    "——**不等于整页没有**（片段只送 600 字，整页原文可能有，需你自己去 PDF 核）；"
+                    "但对“依据是否在模型看到的原文里”这个问题，只能记“无法判断”"
+                )
+        if gap.get("no_source"):
+            out.append("- ⚠️ 这条没有可核的原文——**先看这一条**")
         out.append("")
         out.append(f"- 判断：{CHOICES}")
         out.append("- 理由（不支持的必填）：")
