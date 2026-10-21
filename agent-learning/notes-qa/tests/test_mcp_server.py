@@ -415,12 +415,20 @@ def test_argument_coercion_falls_back_instead_of_raising():
     assert mcp._positive_int("abc", 8) == 8
 
 
-def test_allow_spend_flag_opens_the_gate(monkeypatch, capsys):
+def test_allow_spend_flag_opens_the_gate(monkeypatch, capsys, tmp_path):
     """`--allow-spend` 与设环境变量等价——MCP 客户端配置里未必支持 `env` 键，所以要有个开关。
 
     它只是**把同一个环境变量设上**（不给 `spend_allowed()` 添第二条判据）：
     两处判断必然漂移，这是 T41 的教训。
+
+    **自建一个空索引，不碰本地 `data/`**（台账 T54）：`--check` 在索引不就绪时返回 1，
+    那是**正确行为**；而 CI 上没有 `data/`，所以"断言返回 0"必须自己准备索引。
+    这是 T51 那条"测试不许假设本地语料/索引存在"的**第二次**违反——写进 AGENTS.md 还是犯了，
+    说明这种事不该靠记性：凡是要跑 `--check` 的测试，一律先在这个 `tmp_path` 里自建索引。
     """
+    for name in ("chunks.jsonl", "vectors.npz", "meta.json"):
+        (tmp_path / name).write_text("", encoding="utf-8")  # `--check` 只看在不在
+    monkeypatch.setenv("NOTES_QA_INDEX", str(tmp_path))
     monkeypatch.delenv(mcp.SPEND_ENV, raising=False)
 
     assert mcp.main(["--check"]) == 0

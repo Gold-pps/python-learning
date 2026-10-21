@@ -184,6 +184,9 @@ uv run python eval_cases.py --unit-only   # 只跑单元测试（无需网络）
 - **测试不许假设本地语料 / 索引存在**：`data/` 在 `.gitignore` 里，**CI 上没有**——
   本地绿、CI 红就是这么来的（T51：一条"默认索引位置与 cwd 无关"的测试顺手加了句
   `assert path.exists()`）。要证明"位置对不对"就对比路径，别去戳磁盘；
+  **这条被违反了两次**（T54：断言 `main(["--check"]) == 0`，而 `--check` 在索引不就绪时
+  **正确地**返回 1）。所以别再靠记性——**凡是要跑 `--check` 的测试，一律先在 `tmp_path` 里
+  自建索引**（三个空文件就够，`--check` 只看在不在）并把 `NOTES_QA_INDEX` 指过去；
 - **Windows 上开发**：命令用 PowerShell，超过三行的脚本写成临时 `.py` 文件再跑
   （`python -c "长字符串"` 的引号会被 PowerShell 吃掉）；
 - **跑 pytest 需要管理员权限**（或开 Windows 开发者模式）：普通用户建不了文件符号链接，
