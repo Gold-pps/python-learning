@@ -109,13 +109,14 @@
       <textarea id="q" placeholder="例：刀具磨损监测有哪些主流方法，各自优缺点？&#10;（Enter 发送，Shift+Enter 换行）"></textarea>
       <button class="primary" id="send">提问</button>
     </div>
+  <div class="controls" id="samples" style="margin-top:6px"></div>
     <div class="controls">
       <label><input type="checkbox" id="carry" checked> 追问时带上上一问</label>
       <label><input type="checkbox" id="multihop" checked> 多跳检索（多一次模型调用）</label>
       <div class="spacer"></div>
       <button class="link" id="reset">新对话</button>
     </div>
-    <div class="controls"><span id="hint">答案由 DeepSeek 生成，依据是本地 44 篇资料；引用可点开回看原文片段。</span></div>
+    <div class="controls"><span id="hint">答案由 DeepSeek 生成，依据是本地资料（篇数见顶部“索引就绪”）；引用可点开回看原文片段。</span></div>
   </div>
 
   <div id="thread"></div>
@@ -182,6 +183,7 @@ async function loadHealth() {
       // 客户端只做提示（maxlength），真正的把关在服务端——前端限制绕过去太容易了
       $("q").maxLength = h.limits.max_question_chars;
     }
+    renderExamples(h.capability);
   } catch (err) {
     $("health").textContent = "自检失败：" + err;
   }
@@ -285,7 +287,46 @@ async function ask() {
   }
 }
 
+
+// ---- H4-1：我能答什么 ----
+// 示例问题做成可点的 chip：点了**只填进输入框**，不自动发送（人还得能改）。
+function renderExamples(cap) {
+  const box = $("samples");
+  if (!box || !cap || !(cap.examples || []).length) return;
+  box.textContent = "";
+  box.appendChild(el("span", null, "可以这样问："));
+  for (const q of cap.examples) {
+    const chip = el("span", "pill", q);
+    chip.style.cursor = "pointer";
+    chip.title = "点一下填进输入框（不会自动发送）";
+    chip.addEventListener("click", () => {
+      $("q").value = q;
+      $("q").focus();
+    });
+    box.appendChild(chip);
+  }
+}
+
+// "你能回答什么"这类元问题，服务端**不检索、不花钱**，直接回这段说明；这里只负责画出来。
+function renderCapability(evt, ctx) {
+  const card = el("div", "card");
+  if (evt.question) card.appendChild(el("p", "q", evt.question));
+  card.appendChild(el("div", null, evt.one_liner || ""));
+  const subs = el("div", null, "能答的子主题：");
+  for (const name of evt.subtopics || []) subs.appendChild(el("span", "pill", name));
+  card.appendChild(subs);
+  const bad = el("div", "warn", "不覆盖：");
+  for (const item of evt.not_covered || []) bad.appendChild(el("div", null, "· " + item));
+  card.appendChild(bad);
+  ctx.body.appendChild(card);
+}
+
 function handleEvent(event, ctx) {
+  if (event.type === "capability") {
+    renderCapability(event, ctx);
+    return;  // 元问题没有四段式、没有引用，不走后面的结果渲染
+  }
+
   if (event.type === "start") {
     if (event.session_id) state.sessionId = event.session_id;
     if (event.carried_previous) {
@@ -299,10 +340,73 @@ function handleEvent(event, ctx) {
     ctx.body.appendChild(el("div", "warn", "本次失败：" + event.message));
     return;
   }
-  if (event.type === "result") { renderResult(event, ctx); return; }
+  if (event.type === "result") {
+    renderResult(event, ctx);
+    // 导出按钮挂在结果之后：不进去改 renderResult 的内部，少碰一处少一处回归（H4-2）
+    ctx.body.appendChild(exportButtons(event.data));
+    return;
+  }
 }
 
 // ---- 结果渲染 ----
+
+// ---- H4-2：导出这次问答 ----
+// 内容由服务端渲染（复用界面那份 render_view_markdown），这里只管"发请求 + 下载"。
+async function downloadView(view, fmt) {
+  const resp = await fetch("/api/export", {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({ view: view, fmt: fmt }),
+  });
+  if (!resp.ok) {
+    let detail = "";
+    try {
+      const body = await resp.json();
+      detail = body.detail || JSON.stringify(body);
+    } catch (err) {
+      detail = await resp.text();
+    }
+    alert("导出失败：" + detail);
+    return;
+  }
+  const blob = await resp.blob();
+  const name = filenameFromHeader(resp.headers.get("Content-Disposition")) || "notes-qa." + fmt;
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = name;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+// 中文文件名走 `filename*=UTF-8''…`（HTTP 头按 ISO-8859-1 传，中文直接塞会发不出去——T40 同族）
+function filenameFromHeader(header) {
+  if (!header) return "";
+  const star = /filename\*=UTF-8''([^;]+)/i.exec(header);
+  if (star) {
+    try {
+      return decodeURIComponent(star[1]);
+    } catch (err) {
+      /* 解不开就退回 ASCII 那个 */
+    }
+  }
+  const plain = /filename="([^"]+)"/i.exec(header);
+  return plain ? plain[1] : "";
+}
+
+function exportButtons(view) {
+  const box = el("div", "controls");
+  box.appendChild(el("span", null, "这次问答："));
+  for (const pair of [["md", "导出 MD"], ["json", "导出 JSON"]]) {
+    const button = el("button", null, pair[1]);
+    button.addEventListener("click", () => downloadView(view, pair[0]));
+    box.appendChild(button);
+  }
+  return box;
+}
+
 function renderResult(event, ctx) {
   const view = event.data;
   ctx.body.appendChild(metaLine(view));

@@ -28,7 +28,7 @@ from pathlib import Path
 
 from constants import DEEPSEEK_MODEL
 from fastapi import FastAPI, Header, HTTPException, Request
-from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, Response, StreamingResponse
 from pydantic import BaseModel
 
 from web.pricing import PRICE_SNAPSHOT_DATE, PRICE_SOURCE_URL, describe_pricing, is_peak
@@ -250,6 +250,8 @@ def create_app(
     async def health(
         request: Request, x_token: str | None = Header(default=None)
     ) -> dict:
+        from rag.coverage import summary as capability_summary
+
         if app.state.token:
             provided = x_token or request.query_params.get("token")
             if provided != app.state.token:
@@ -278,9 +280,47 @@ def create_app(
                 "source": PRICE_SOURCE_URL,
                 "text": describe_pricing(peak),
             },
+            # 能力说明的**唯一来源**在 `rag/coverage.py`（H4-1）：界面靠它放"能问什么"与示例问题。
+            # 局部导入是为了不让 web 顶层随功能一路加依赖。
+            "capability": capability_summary(),
             "limits": {"max_question_chars": MAX_QUESTION_CHARS},
             "log": str(app.state.log_path) if app.state.log_path else None,
         }
+
+    @app.post("/api/export")
+    async def api_export(request: Request, x_token: str | None = Header(default=None)):
+        """把界面上那一次问答导成文件（H4-2）。
+
+        内容由客户端把**它手里的视图**发回来（服务端不存视图，避免又多一份状态），
+        渲染复用 `render_view_markdown` —— 导出的就是你看到的，不另写一份。
+        """
+        check_token(request, x_token)
+        from web.export import content_disposition, filename, render
+
+        try:
+            payload = await request.json()
+        except Exception as exc:
+            raise HTTPException(
+                status_code=400, detail="请求体不是合法 JSON。"
+            ) from exc
+        if not isinstance(payload, dict):
+            raise HTTPException(status_code=400, detail="请求体应当是对象。")
+        view = payload.get("view")
+        fmt = str(payload.get("fmt") or "md")
+        if not isinstance(view, dict) or not view.get("sections"):
+            raise HTTPException(
+                status_code=400, detail="缺少 view（应当是一次问答的结果对象）。"
+            )
+        try:
+            text, media = render(view, fmt)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+        return Response(
+            content=text,
+            media_type=media,
+            headers={"Content-Disposition": content_disposition(filename(view, fmt))},
+        )
 
     @app.post("/api/ask")
     async def api_ask(
@@ -294,6 +334,26 @@ def create_app(
             raise HTTPException(
                 status_code=400,
                 detail=f"问题过长（{len(question)} 字符），上限 {MAX_QUESTION_CHARS} 字符。",
+            )
+
+        from rag.coverage import is_capability_question
+        from rag.coverage import summary as capability_summary
+
+        if is_capability_question(question):
+            # 元问题（"你能回答什么"）**不检索、不花钱**，直接回能力说明——第 24 周真实使用里
+            # 这句话被当成普通问题检索、回了一段资料摘录（H4-1 就是补这个洞）。
+            # 走同一条 SSE 通道，前端只需认一个新事件类型；也不写使用日志（没有检索、没有模型调用）。
+            payload = {
+                "type": "capability",
+                "question": question,
+                **capability_summary(),
+            }
+
+            async def capability_stream():
+                yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+
+            return StreamingResponse(
+                capability_stream(), media_type="text/event-stream"
             )
 
         session_id = body.session_id or new_session_id()

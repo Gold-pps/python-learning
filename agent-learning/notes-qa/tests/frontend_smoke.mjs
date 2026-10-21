@@ -198,6 +198,9 @@ const view = JSON.parse(readFileSync(fixturePath, "utf8"));
   assert.match(text, /相邻证据/, "缺口题的提示必须出现（首跑后加的）");
   assert.match(text, /候选不足以支撑这一段/, "空段要有说明，不能静默省略");
   assert.match(text, /方法A/);
+  // 导出按钮（H4-2）：贴在结果之后，两个都在
+  assert.match(text, /导出 MD/);
+  assert.match(text, /导出 JSON/);
 
   // 引用标签：可点的只有**能回查到的**两种（精确 / 只到文件）。
   // 第三种（unresolved）是服务端的兜底分支，正常数据里**一个都不该有**——
