@@ -98,3 +98,34 @@ def test_real_questions_are_never_treated_as_meta():
 
     for question in real_questions:
         assert not is_capability_question(question), f"被误判成元问题：{question}"
+
+
+# ---- 问题 → 子主题（加权检索的前置判定）----
+
+
+def test_subtopic_of_question_recognises_a_clear_direction():
+    """问题里明确写了某方向的行话 → 认得出（大小写、全半角不敏感）。"""
+    from rag.coverage import subtopic_of_question
+
+    assert subtopic_of_question("刀具磨损监测有哪些主流方法？") == "刀具磨损监测"
+    assert (
+        subtopic_of_question("五轴机床后置处理怎么把刀位文件转成 NC 代码？")
+        == "NC 代码生成与校验"
+    )
+    assert subtopic_of_question("G 代码自动生成怎么保证正确性？") == "NC 代码生成与校验"
+
+
+def test_subtopic_of_question_refuses_to_guess_when_ambiguous():
+    """**同时命中两个方向时不猜**——加权判错的代价比漏判大得多。"""
+    from rag.coverage import subtopic_of_question
+
+    assert subtopic_of_question("工艺路线怎么用数字孪生优化？") is None
+    assert subtopic_of_question("误差补偿和刀具磨损有关系吗？") is None
+
+
+def test_subtopic_of_question_returns_none_for_unrelated_questions():
+    """跟语料无关的问题 → None（调用方退回普通检索）。"""
+    from rag.coverage import subtopic_of_question
+
+    assert subtopic_of_question("今天天气怎么样？") is None
+    assert subtopic_of_question("") is None

@@ -83,3 +83,42 @@ def summary() -> dict:
         "not_covered": list(NOT_COVERED),
         "examples": list(EXAMPLES),
     }
+
+
+# ---- 问题 → 子主题（给"加权检索"用）----
+#
+# **保守到不会误伤**：只认明确写了本方向的行话；命中多个子主题时**返回 None（不猜）**。
+# 理由：加权会改变候选排序，判错的代价是"所有综述问答被悄悄偏向某个方向"。
+# 宁可漏判（不加权，退回普通检索），不可错判。
+SUBTOPIC_KEYWORDS: dict[str, tuple[str, ...]] = {
+    "刀具磨损监测": ("刀具磨损", "磨损监测", "刀具状态监测"),
+    "切削参数优化": ("切削参数", "参数优化", "铣削参数", "切削用量"),
+    "数字孪生与智能车间": ("数字孪生", "智能车间", "智能产线", "虚拟调试"),
+    "数控编程与轨迹规划": ("数控编程", "轨迹规划", "刀具轨迹", "刀轨"),
+    "机床误差补偿": ("误差补偿", "几何误差", "热误差", "误差辨识"),
+    "AI 辅助工艺编制": ("工艺编制", "工艺设计", "CAPP", "工艺决策", "工艺路线"),
+    "NC 代码生成与校验": (
+        "NC代码",
+        "NC 代码",
+        "G代码",
+        "G 代码",
+        "后置处理",
+        "数控程序",
+    ),
+}
+
+
+def subtopic_of_question(question: str) -> str | None:
+    """从问题里认出它属于哪个子主题；**认不准就返回 None**。
+
+    返回 `None` 时调用方应当走普通检索——这是有意的：加权只该在"问题明确指向某个方向"时生效。
+    """
+    text = (question or "").casefold()
+    if not text:
+        return None
+    hits = [
+        subtopic
+        for subtopic, keywords in SUBTOPIC_KEYWORDS.items()
+        if any(keyword.casefold() in text for keyword in keywords)
+    ]
+    return hits[0] if len(hits) == 1 else None

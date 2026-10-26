@@ -465,6 +465,10 @@ def ask(
             result, index=index_label, top_k=top_k, elapsed_s=total_s
         )
         record["source"] = "web"
+        # **花费必须自己落盘**：日志里没有 cost 时，"花了多少钱"就只能靠人记——
+        # 2026-10-26 想核 README 里的"574 条/0.71 元"时，才发现整份日志都算不出花费（第四阶段 H1）。
+        # 峰谷标记一起存：单价差一倍，不存就没法解释同一个 token 数为什么钱不一样。
+        record["cost"] = view.get("cost") or {}
         append_log(log_path, record)
         view["logged_to"] = str(log_path)
     return view

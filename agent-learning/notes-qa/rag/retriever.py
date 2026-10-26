@@ -656,3 +656,89 @@ def _cli() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(_cli())
+
+
+# ---- 子主题先验：先紧、不够再放宽（2026-10-25）----
+
+
+def search_scoped(
+    retriever: Retriever,
+    query: str,
+    top_k: int = DEFAULT_TOP_K,
+    *,
+    subtopic: str | None = None,
+    min_keep: int | None = None,
+) -> tuple[list[SearchHit], dict]:
+    """先按子主题过滤检索，**条数不足就回落全局**，并把"这批候选是紧口径还是宽口径"标出来。
+
+    为什么要这个折中（`eval/检索覆盖-子主题先验实验.md` 实测）：
+
+    - `subtopic=` 是**过滤**不是加权：NC 代码类的"子主题内命中"从 **2/5 提到 5/5**；
+    - 但代价是候选可能太少——AI 辅助工艺编制那题只剩 **2 条**，
+      而综述问答要靠 5~10 条候选组织四段式，候选太少会"答不全"；
+    - 所以：**先紧，不够再放宽，并且明确告诉调用方放宽了**（`meta.fallback_reason`）。
+      不标注的话，调用方没法区分"这批候选本来就只有这么多"和"我们放宽了口径"。
+    """
+    want = min_keep if min_keep is not None else max(1, top_k // 2)
+    meta: dict = {
+        "scoped": False,
+        "subtopic": subtopic,
+        "min_keep": want,
+        "fallback_reason": None,
+    }
+    if subtopic:
+        scoped_hits = retriever.search(query, top_k, subtopic=subtopic)
+        if len(scoped_hits) >= want:
+            meta["scoped"] = True
+            return scoped_hits, meta
+        meta["fallback_reason"] = (
+            f"子主题内只召回 {len(scoped_hits)} 条，少于 {want} 条"
+        )
+    return retriever.search(query, top_k), meta
+
+
+def search_boosted(
+    retriever: Retriever,
+    query: str,
+    top_k: int = DEFAULT_TOP_K,
+    *,
+    subtopic: str | None = None,
+    factor: float = 1.2,
+) -> tuple[list[SearchHit], dict]:
+    """**加权**口径：全局检索后给同子主题的命中加成，再重排——**不排除别的方向**。
+
+    与 `search_scoped` 的分工（`eval/检索覆盖-子主题先验实验.md` 的三口径实测）：
+
+    - `search_scoped`（过滤）：**100% 不跨台**，但会把候选饿到 1 篇 2 段——综述问答写不出四段式；
+    - `search_boosted`（加权）：候选更丰富（每题 3~4 篇），代价是仍会混进几条相邻方向。
+
+    对"要 5~10 条候选组织答案"的用途，**饿死比跨台更致命**，所以生产路径优先这一支。
+    加成幅度刻意小（默认 1.2）：加权只是"同样的分数下偏向本方向"，
+    不该把明显更相关的别的方向片段压下去。
+    """
+    pool = max(top_k * 3, top_k)
+    hits = retriever.search(query, pool)
+    meta: dict = {
+        "boosted": bool(subtopic),
+        "subtopic": subtopic,
+        "factor": factor if subtopic else None,
+        "pool": len(hits),
+    }
+    if not subtopic:
+        return hits[:top_k], meta
+
+    boosted = []
+    for hit in hits:
+        if subtopic_of(hit.chunk.source_path) == subtopic:
+            boosted.append(
+                SearchHit(
+                    chunk=hit.chunk,
+                    score=hit.score * factor,
+                    dense_rank=hit.dense_rank,
+                    sparse_rank=hit.sparse_rank,
+                )
+            )
+        else:
+            boosted.append(hit)
+    boosted.sort(key=lambda item: item.score, reverse=True)
+    return boosted[:top_k], meta

@@ -460,29 +460,47 @@ def test_stdio_handshake_lists_the_three_tools():
         {"jsonrpc": "2.0", "method": "notifications/initialized"},
         {"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}},
     ]
-    proc = subprocess.run(
-        [sys.executable, "-X", "utf8", "-m", "mcp_server"],
-        cwd=notes_qa,
-        input="".join(json.dumps(item, ensure_ascii=False) + "\n" for item in requests),
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        timeout=90,
-        check=False,
+
+    def handshake() -> tuple[dict, str]:
+        """起一次子进程做握手，返回 `(按 id 索引的回复, stderr)`。"""
+        proc = subprocess.run(
+            [sys.executable, "-X", "utf8", "-m", "mcp_server"],
+            cwd=notes_qa,
+            input="".join(
+                json.dumps(item, ensure_ascii=False) + "\n" for item in requests
+            ),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=90,
+            check=False,
+        )
+        found: dict = {}
+        for line in proc.stdout.splitlines():
+            try:
+                message = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if "id" in message:
+                found[message["id"]] = message
+        return found, proc.stderr
+
+    # 允许重试一次——**这不是逻辑测试**：它起子进程做协议握手，CI 负载高时会抖
+    # （本地全量跑偶发红过两次，单跑 3/3 稳过，见台账 T55）。
+    # 关键是"重试只救抖动，不救命"：逻辑断言两遍都跑，真坏了两次都会红；
+    # 而且断言改成**看回复**而不是看进程返回值——返回值 0 只说明"它退出了"。
+    replies: dict = {}
+    stderr = ""
+    for _attempt in range(2):
+        replies, stderr = handshake()
+        if "result" in replies.get(1, {}) and 2 in replies:
+            break
+
+    assert "result" in replies.get(1, {}), (
+        f"initialize 没回成功（两次）：{stderr[-500:]}"
     )
-
-    assert proc.returncode == 0, f"stdio 起不来：{proc.stderr[-500:]}"
-    replies = {}
-    for line in proc.stdout.splitlines():
-        try:
-            message = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if "id" in message:
-            replies[message["id"]] = message
-
-    assert "result" in replies.get(1, {}), "initialize 没回成功"
+    assert 2 in replies, f"tools/list 没回（两次）：{stderr[-500:]}"
     tools = {tool["name"]: tool for tool in replies[2]["result"]["tools"]}
     assert set(tools) == {"search_corpus", "read_chunk", "review_question"}
     # 注解在**协议线上是驼峰**（Python 侧是蛇形）——客户端看到的是这个

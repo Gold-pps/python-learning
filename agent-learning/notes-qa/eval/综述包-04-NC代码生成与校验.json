@@ -1,0 +1,466 @@
+{
+  "question": "NC 代码自动生成怎么保证正确性？",
+  "retrieval_query": "NC 代码自动生成怎么保证正确性？",
+  "carried_from": null,
+  "sections": {
+    "研究现状": [
+      {
+        "point": "程序错误可致首件报废，某加工厂此类报废占首件不合格品30%以上，需传输前校验。",
+        "citations": [
+          {
+            "text": "NC代码生成与校验/Vericut数控仿真技术研究及应用_四川兵工学报2013.pdf:第 1 页",
+            "kind": "exact",
+            "hit_index": 1
+          }
+        ]
+      },
+      {
+        "point": "CAM自带仿真多针对自身前处理结果，对后处理G代码仿真能力有限。",
+        "citations": [
+          {
+            "text": "NC代码生成与校验/Vericut数控仿真技术研究及应用_四川兵工学报2013.pdf:第 1 页",
+            "kind": "exact",
+            "hit_index": 1
+          }
+        ]
+      },
+      {
+        "point": "已有研究以NC代码为对象，还原刀轨、识别拐角并自动生成拐角加工程序，实例验证算法正确性。",
+        "citations": [
+          {
+            "text": "NC代码生成与校验/后置处理中平面轮廓拐角加工程序自动生成技术_图学学报2013.pdf:第 2 页",
+            "kind": "exact",
+            "hit_index": 0
+          },
+          {
+            "text": "NC代码生成与校验/后置处理中平面轮廓拐角加工程序自动生成技术_图学学报2013.pdf:第 1 页",
+            "kind": "exact",
+            "hit_index": 9
+          }
+        ]
+      },
+      {
+        "point": "GLLM按几何子任务分别生成G代码，再做细化和整合为可执行程序。",
+        "citations": [
+          {
+            "text": "NC代码生成与校验/GLLM-基于大模型自纠错的G代码生成_arXiv2025.pdf:第 5 页",
+            "kind": "exact",
+            "hit_index": 7
+          }
+        ]
+      }
+    ],
+    "方法对比": [
+      {
+        "point": "Vericut数控仿真校验",
+        "method": "Vericut数控仿真校验",
+        "pros": "可检查碰撞、干涉、过切欠切，表面结果较真实",
+        "cons": "依赖CAM配合，且主要验证而非生成",
+        "citations": [
+          {
+            "text": "NC代码生成与校验/Vericut数控仿真技术研究及应用_四川兵工学报2013.pdf:第 1 页",
+            "kind": "exact",
+            "hit_index": 1
+          },
+          {
+            "text": "NC代码生成与校验/Vericut数控仿真技术研究及应用_四川兵工学报2013.pdf:第 2 页",
+            "kind": "exact",
+            "hit_index": 4
+          }
+        ]
+      },
+      {
+        "point": "拐角加工程序自动生成（分层铣削）",
+        "method": "拐角加工程序自动生成（分层铣削）",
+        "pros": "减少拐角瞬时切削量，实例验证正确性",
+        "cons": "需识别拐角并设分层等参数，面向平面轮廓",
+        "citations": [
+          {
+            "text": "NC代码生成与校验/后置处理中平面轮廓拐角加工程序自动生成技术_图学学报2013.pdf:第 2 页",
+            "kind": "exact",
+            "hit_index": 0
+          },
+          {
+            "text": "NC代码生成与校验/后置处理中平面轮廓拐角加工程序自动生成技术_图学学报2013.pdf:第 6 页",
+            "kind": "exact",
+            "hit_index": 2
+          }
+        ]
+      },
+      {
+        "point": "数字孪生虚拟调试",
+        "method": "数字孪生虚拟调试",
+        "pros": "可虚拟验证NC/G代码潜在错误，降低实体调试风险",
+        "cons": "偏调试验证，未直接给出NC生成方法",
+        "citations": [
+          {
+            "text": "数字孪生与智能车间/数字孪生驱动的机械工艺系统研究进展_航空学报2024.pdf:第 13 页",
+            "kind": "exact",
+            "hit_index": 3
+          }
+        ]
+      },
+      {
+        "point": "GLLM大模型G代码生成",
+        "method": "GLLM大模型G代码生成",
+        "pros": "子任务生成并细化整合，改善复杂任务处理",
+        "cons": "候选未给出独立正确性验证结果",
+        "citations": [
+          {
+            "text": "NC代码生成与校验/GLLM-基于大模型自纠错的G代码生成_arXiv2025.pdf:第 5 页",
+            "kind": "exact",
+            "hit_index": 7
+          }
+        ]
+      }
+    ],
+    "结论": [
+      {
+        "point": "正确性保证重点是在DNC传输到机床前完成程序校验，避免首件风险。",
+        "citations": [
+          {
+            "text": "NC代码生成与校验/Vericut数控仿真技术研究及应用_四川兵工学报2013.pdf:第 1 页",
+            "kind": "exact",
+            "hit_index": 1
+          }
+        ]
+      },
+      {
+        "point": "专业仿真可做碰撞、干涉和过切欠切检查，作为生成后校验手段。",
+        "citations": [
+          {
+            "text": "NC代码生成与校验/Vericut数控仿真技术研究及应用_四川兵工学报2013.pdf:第 2 页",
+            "kind": "exact",
+            "hit_index": 4
+          }
+        ]
+      },
+      {
+        "point": "自动生成的拐角加工程序需通过实例验证算法正确性。",
+        "citations": [
+          {
+            "text": "NC代码生成与校验/后置处理中平面轮廓拐角加工程序自动生成技术_图学学报2013.pdf:第 1 页",
+            "kind": "exact",
+            "hit_index": 9
+          },
+          {
+            "text": "NC代码生成与校验/后置处理中平面轮廓拐角加工程序自动生成技术_图学学报2013.pdf:第 6 页",
+            "kind": "exact",
+            "hit_index": 2
+          }
+        ]
+      },
+      {
+        "point": "大模型生成G代码需分解、细化和整合，但候选中缺少系统验证证据。",
+        "citations": [
+          {
+            "text": "NC代码生成与校验/GLLM-基于大模型自纠错的G代码生成_arXiv2025.pdf:第 5 页",
+            "kind": "exact",
+            "hit_index": 7
+          }
+        ]
+      }
+    ],
+    "可复用点": [
+      {
+        "point": "解析NC代码还原刀轨并识别拐角，再按分层方式构建加工程序。",
+        "citations": [
+          {
+            "text": "NC代码生成与校验/后置处理中平面轮廓拐角加工程序自动生成技术_图学学报2013.pdf:第 2 页",
+            "kind": "exact",
+            "hit_index": 0
+          },
+          {
+            "text": "NC代码生成与校验/后置处理中平面轮廓拐角加工程序自动生成技术_图学学报2013.pdf:第 1 页",
+            "kind": "exact",
+            "hit_index": 9
+          }
+        ]
+      },
+      {
+        "point": "生成后使用专业数控仿真检查碰撞、干涉、过切欠切。",
+        "citations": [
+          {
+            "text": "NC代码生成与校验/Vericut数控仿真技术研究及应用_四川兵工学报2013.pdf:第 2 页",
+            "kind": "exact",
+            "hit_index": 4
+          }
+        ]
+      },
+      {
+        "point": "拐角自动生成时固定识别角度、分层高度等参数并用实例验证。",
+        "citations": [
+          {
+            "text": "NC代码生成与校验/后置处理中平面轮廓拐角加工程序自动生成技术_图学学报2013.pdf:第 6 页",
+            "kind": "exact",
+            "hit_index": 2
+          }
+        ]
+      },
+      {
+        "point": "大模型按几何子任务分别生成，再统一细化整合。",
+        "citations": [
+          {
+            "text": "NC代码生成与校验/GLLM-基于大模型自纠错的G代码生成_arXiv2025.pdf:第 5 页",
+            "kind": "exact",
+            "hit_index": 7
+          }
+        ]
+      }
+    ]
+  },
+  "insufficient": false,
+  "note": "候选未给出通用的NC自动生成正确性保证体系；强化学习调度片段中的“智能体”指调度决策体，不等同于大语言模型智能体，未用于回答。",
+  "degraded": false,
+  "reason": "四段式回答已产出；引用：精确 21、缺定位 0、编造 0；无引用条目 0；硬事实待核 5 项",
+  "plan_reason": "认为有缺口：缺少对NC代码自动生成阶段正确性保证方法的系统梳理，如生成规则/约束、后置处理校验、代码规则检查等；仿真校验方面仅有Vericut和数字孪生零散提及，缺少完整校验流程与判据；自纠错G代码生成仅提及细化与集成，未展开具体正确性校验机制；片段7与NC代码自动生成正确性无关",
+  "thinking_recommended": false,
+  "citations": {
+    "exact": 21,
+    "partial": 0,
+    "invalid": [],
+    "uncited": 0
+  },
+  "candidates": [
+    {
+      "id": "NC代码生成与校验/后置处理中平面轮廓拐角加工程序自动生成技术_图学学报2013.pdf:2:23641c231df37a1d",
+      "source_path": "NC代码生成与校验/后置处理中平面轮廓拐角加工程序自动生成技术_图学学报2013.pdf",
+      "locator": "第 2 页",
+      "start": 2,
+      "end": 2,
+      "score": 0.031099,
+      "channels": "dense+sparse",
+      "dense_rank": 8,
+      "dense_score": 0.566346,
+      "sparse_rank": 1,
+      "sparse_score": 22.865457,
+      "is_reference": false,
+      "text": "码生\n成前完成。而目前尚未见到专门针对 NC 代码开\n展拐角区域识别与拐角加工程序自动生成的研\n究。但针对 NC 代码开展拐角区域识别又是非常\n必要，主要体现在以下 3 个方面： \n1） 早期未开展拐角加工的数控程序在拐角\n处已经无法满足当前日益提高的表面质量要求，\n甚至出现刀具崩裂。这主要是因为拐角加工研究\n起步较晚，早期数控程序内尚无开展拐角加工。     \n2） 大型零件，如航空结构件，拐角位置较\n多，专门在此位置开展拐角加工程序编制，耗费\n时间非常长，多则有 3～4 天。 \n3） 早期 NC代码较多无三维数模，无法采\n用上述各拐角加工方法生成拐角加工程序。另\n外，拐角加工一般为平面加工，其加工导引元为\n平面曲线，因此，本文重点研究平面曲线的拐角\n加工。 \n针对需求，以 NC 代码为研究对象，读取\nNC 代码，还原刀轨路径，识别拐角位置；按分\n层加工法，并采用直线与圆弧相切加工方式，自\n动构建 NC 代码，实现拐角加工。该分层方法从\n刀轴方向上减少刀具瞬时切削量，保证在拐角位\n置处切削量减少，可减少刀具颤动，最终保障刀\n具在拐角位置处铣削安全与拐角处表面质量，最\n后结合实例开展分析和验证。",
+      "citation": "NC代码生成与校验/后置处理中平面轮廓拐角加工程序自动生成技术_图学学报2013.pdf:第 2 页",
+      "doc_type": "pdf"
+    },
+    {
+      "id": "NC代码生成与校验/Vericut数控仿真技术研究及应用_四川兵工学报2013.pdf:1:fc666a5d4849a30e",
+      "source_path": "NC代码生成与校验/Vericut数控仿真技术研究及应用_四川兵工学报2013.pdf",
+      "locator": "第 1 页",
+      "start": 1,
+      "end": 1,
+      "score": 0.029907,
+      "channels": "dense+sparse",
+      "dense_rank": 1,
+      "dense_score": 0.611038,
+      "sparse_rank": 14,
+      "sparse_score": 11.065627,
+      "is_reference": false,
+      "text": "ｅｒｉｆｙｉｎｇ\n　　\n在数控加工方面，\nＣＡＭ\n软件和\nＮＣ\n在线程序传输系统\n得到了广泛的应用。随着信息化的飞速发展，如何校验数控\n程序的正确性便显得非常重要。传统的方法，使用首件试切\n法来校验。但是，试切通常具有比较大的风险。据统计，某\n加工厂每年由于程序错误而导致的机床或刀具与零件碰撞\n造成的首件报废，占首件不合格品的\n３０％\n以上。因此，亟需\n一种有效的手段，在程序通过\nＤＮＣ\n系统传输到机床以前就\n确认其正确性，以避免首件加工时由于程序错误导致材料、\n工时的浪费，或者由于碰撞而导致机床和刀具的损坏\n［\n１－３\n］\n。\n１　\n基于\nＶｅｒｉｃｕｔ\n的数控仿真技术\n虽然目前的\nＣＡＭ\n软件诸如\nＵＧ／ＣＡＭ\n、\nＰｒｏｅ／ＣＡＭ\n、\nＭａｓｔｅｒ\nＣＡＭ\n、\nＰｏｗｅｒＭｉｌｌ\n等也具有一定仿真功能，但主要是对软件自\n身前处理结果的仿真，对其他软件的前处理结果或后处理的\nＧ\n代码是毫无办法的，仿真功能非常有限\n［\n４－５\n］\n。\nＶｅｒｉｃｕｔ\n数控仿真软件是\nＣＧＴｅｃｈ\n公司制作的专业级数控\n仿真软件，由\nＮＣ\n程序验证模块、机床运动仿真模块、优化路\n径模块、多轴模块、自动比较模块和\nＣＡＤ／ＣＡＭ\n接口等组成，\n提供了机床仿真功能、多轴功能、刀路优化、加工结果与设计\n模型对比、加工后模型输出、在线检测功能以及和\nＣＡＤ／ＣＡＭ\n软件的接口等功能，可仿真数控车床、铣床、加工中心等多种\n加工设备的数控加工过程，也能进行\nＮＣ\n程序优化，缩短加工\n时间，检查过切、欠切，防止机床碰撞、超行程刀、夹具运动干\n涉等错误；具有真实的三维实体显示效果，可以对切削模型\n进行尺寸测量，并能保存切削模型，供检验、后续工序切削加\n工；具 有\nＣＡＤ／ＣＡＭ\n接 口，能 实 现 与\nＵＧ\n、\nＣＡＴＩＡ\n及\nＭａｓｔｅｒ\nＣＡＭ\n等软件的嵌套运行。／ＣＡＭ\n接 口，能 实 现 与\nＵＧ\n、\nＣＡＴＩＡ\n及\nＭａｓｔｅｒ\nＣＡＭ\n等软件的嵌套运行。\n２　\n机床动力学模型和系统控制文件\n在实际生产中，尤其是多轴加工中，机床、夹具、刀具、毛\n坯的碰撞通常是无法预料的。因此，在三轴及多轴加工前，\n尽量用精确的机床模型进行仿真，可以避免由于碰撞带来的",
+      "citation": "NC代码生成与校验/Vericut数控仿真技术研究及应用_四川兵工学报2013.pdf:第 1 页",
+      "doc_type": "pdf"
+    },
+    {
+      "id": "NC代码生成与校验/后置处理中平面轮廓拐角加工程序自动生成技术_图学学报2013.pdf:6:bc9b709893ed70f2",
+      "source_path": "NC代码生成与校验/后置处理中平面轮廓拐角加工程序自动生成技术_图学学报2013.pdf",
+      "locator": "第 6 页",
+      "start": 6,
+      "end": 6,
+      "score": 0.016129,
+      "channels": "sparse",
+      "dense_rank": null,
+      "dense_score": null,
+      "sparse_rank": 2,
+      "sparse_score": 20.907246,
+      "is_reference": false,
+      "text": "闭及各相邻拐角切\n入段与切出段是否重合，对重合拐角加工的切入\n段与切出段进行合并，得到组合拐角加工。 \nStep 8  提取切入段 l2、转角加工l3、切出段\nl4 加工 NC 程序段，修改相应 Z 坐标，得到各层\n切入段、转角加工、切出段加工 NC 程序段。 \nStep 9   分别在各层拐角加工的 NC 程序段\n前与后添加进刀段与退刀段及进退刀连接段代\n码，并写入原始文件。 \nStep 10   如此重复 Step3 至 Step9，完成各\nci 内拐角处加工程序，保存 NC 代码文件。 \n2.2  实例验证 \n为验证本文所提出方法的正确性，以一实例\n为证。实例原始加工导引线的拐角处基本尺寸如\n图3所示，该实例包含了 Cpt和Carc拐角及组合拐\n角。加工刀具直径φ20mm，采用西门子840D控制\n系统生成的 NC代码，并设拐角最大识别角度\nθ=120°，最大半径为Rmax=25mm，最大加工高度\nZ1=40mm，分层高度h=15mm，切入段与切出段\n距离 w2=w4=15mm ，进刀段与退刀段距离\nw1=w5=3mm，如图4所示。 \n    \n  \n图 3  原始加工导引线与NC文件的加工刀轨                     图 4  拐角识别基本参数界面 \n第 3 期                 饶有福等：后置处理中平面轮廓拐角加工程序自动生成技术                 ·63·",
+      "citation": "NC代码生成与校验/后置处理中平面轮廓拐角加工程序自动生成技术_图学学报2013.pdf:第 6 页",
+      "doc_type": "pdf"
+    },
+    {
+      "id": "数字孪生与智能车间/数字孪生驱动的机械工艺系统研究进展_航空学报2024.pdf:13:ce4486f960f82a2e",
+      "source_path": "数字孪生与智能车间/数字孪生驱动的机械工艺系统研究进展_航空学报2024.pdf",
+      "locator": "第 13 页",
+      "start": 13,
+      "end": 13,
+      "score": 0.016129,
+      "channels": "dense",
+      "dense_rank": 2,
+      "dense_score": 0.603069,
+      "sparse_rank": null,
+      "sparse_score": null,
+      "is_reference": false,
+      "text": " 系 统 和NC 程 序 中 的 潜 在 错\n误（G 代 码），实 验 证 明 了 其 有 效 性。 Wang 等\n［88］\n提 出 的 数 字 孪 生 驱 动 的 加 工 过 程 虚 拟 调 试 以 获\n取 更 好 的 调 试 结 果，通 过 数 控 机 床 主 轴 系 统 虚 拟\n调 试 验 证 了 其 有 效 性。Howard\n［89］\n提 出 了 应 用 数\n字 孪 生 技 术 促 进 物 理 硬 件 的 虚 拟 验 证 及 其 优 化\n设 计，通 过 实 例 证 明 其 节 省 了 时 间 和 人 力 成 本。\n王 春 晓\n［90］\n通 过 建 立 机 床 虚 拟 调 试 模 型 和 设 计 虚\n拟 调 试 平 台，并 对 数 控 铣 床 进 行 虚 拟 调 试，证 明\n其 降 低 了 实 体 调 试 的 风 险 和 成 本。 邓 子 毅\n［91］\n提\n出 的 发 动 机 数 字 孪 生 工 效 虚 拟 人 应 用，基 于 VR\n和 数 字 孪 生 技 术，构 建 虚 拟 人 代 替 物 理 人 完 成 对\n发 动 机 零 部 件 的 人 机 交 互 特 性 验 证，提 升 了 验 证\n效 率，降 低 了 验 证 成 本，有 效 实 现 了 对 航 空 发 动\n机 的 迭 代 优 化。",
+      "citation": "数字孪生与智能车间/数字孪生驱动的机械工艺系统研究进展_航空学报2024.pdf:第 13 页",
+      "doc_type": "pdf"
+    },
+    {
+      "id": "NC代码生成与校验/Vericut数控仿真技术研究及应用_四川兵工学报2013.pdf:2:9563c243be988537",
+      "source_path": "NC代码生成与校验/Vericut数控仿真技术研究及应用_四川兵工学报2013.pdf",
+      "locator": "第 2 页",
+      "start": 2,
+      "end": 2,
+      "score": 0.015873,
+      "channels": "dense",
+      "dense_rank": 3,
+      "dense_score": 0.601817,
+      "sparse_rank": null,
+      "sparse_score": null,
+      "is_reference": false,
+      "text": "．１　\n前罩仿真加工\nＶｅｒｉｃｕｔ\n和其他\nＣＡＭ\n软件配合使用，可以提高数控加工\n的水平和效率。在本例中，用\nＣＡＸＡ\n进行前罩零件粗、精加\n工数控程序的编制，并在\nＶｅｒｉｃｕｔ\n中进行相应的程序仿真验\n证和优化。\n１\n）建立项目（\nＰｒｏｊｅｃｔ\n）\n　　\n当方案建立好后，就可以通过软件右下角的控制按钮对\n程序进行仿真。\n２\n）过切及欠切检查\nＶｅｒｉｃｕｔ\n不仅能够进行碰撞、干涉检查，而且因其模型解\n析度高，更能够逼真的显示加工结果。在实践的过程中，发\n现经过\nＣＡＸＡ\n软件自身功能的仿真，零件表面加工效果显示\n过于平滑，不能反映切削的真实情景；而\nＶｅｒｉｃｕｔ\n的仿真结\n果，显示零件表面刀具纹路清晰可见。通过实际的加工，也\n验证了\nＶｅｒｉｃｕｔ\n的正确性。因此，运用\nＶｅｒｉｃｕｔ\n更能准确的掌\n握\nＣＡＭ\n软件所编制程序的实际加工表面情况，为编程提供\n２０１\n四 川 兵 工 学 报\nｈｔｔｐ\n：\n／／ｓｃｂｇ．ｊｏｕｒｓｅｒｖ．ｃｏｍ／\n",
+      "citation": "NC代码生成与校验/Vericut数控仿真技术研究及应用_四川兵工学报2013.pdf:第 2 页",
+      "doc_type": "pdf"
+    },
+    {
+      "id": "NC代码生成与校验/面向细长面特征的自动数控编程方法研究_制造技术与机床2022.pdf:1:8443fcdbef000729",
+      "source_path": "NC代码生成与校验/面向细长面特征的自动数控编程方法研究_制造技术与机床2022.pdf",
+      "locator": "第 1 页",
+      "start": 1,
+      "end": 1,
+      "score": 0.015873,
+      "channels": "sparse",
+      "dense_rank": null,
+      "dense_score": null,
+      "sparse_rank": 3,
+      "sparse_score": 20.568783,
+      "is_reference": false,
+      "text": "面向细长面特征的自动数控编程方法研究*\n柳大坤①　方喜峰①②　王　楠①　张胜文①②　王　沾①　徐精英①\n（①江苏科技大学机械工程学院，江苏 镇江 212100；\n②江苏省先进制造技术重点实验室，江苏 淮安 223003）\n摘　要：为提高细长面特征数控编程效率和质量，研究了面向细长面自动数控编程方法。在MBD模型\n中获取待加工特征的工艺信息并生成特征图像；从特征图像中提取和优化了加工参考轨迹；\n将优化后的参考轨迹线投影至原特征面并以此自动生成了刀轨和NC代码。最后，在NX平台\n开发出基于该方法的原型系统并以某船用柴油机关键件作为测试对象进行测试。测试结果表\n明，该方法可实现细长面特征数控程序的自动生成，可有效减少人机频繁交互；相较于传统编\n程，该方法生成的NC代码平均减少了近65 %的加工时间。\n关键词：数控编程；细长面特征；图像处理；刀轨优化\n中图分类号：TH164,TP391　　　　文献标识码：A\nDOI：10.19287/j.mtmt.1005-2402.2022.11.016\nResearch on automatic NC programming method for slender plane features\nLIU Dakun①, FANG Xifeng①②, WANG Nan①, ZHANG Shengwen①②, WANG Zhan①, XU Jingying①\n(①School of Mechanical Engineering, Jiangsu University of Science and Technology, Zhenjiang 212100, CHN;\n②Jiangsu Key Laboratory of Advanced Manufacturing Technology, Huai′an 223003, CHN)\nAbstract：In order to improve the efficiency and quality of NC programming efficiency and quality for slender\nplanes, an automatic NC programming method was studied.",
+      "citation": "NC代码生成与校验/面向细长面特征的自动数控编程方法研究_制造技术与机床2022.pdf:第 1 页",
+      "doc_type": "pdf"
+    },
+    {
+      "id": "数字孪生与智能车间/基于数字孪生和强化学习的智能生产线实时调度仿真优化方法_机械工程学报2026.pdf:9:995275254b417f4b",
+      "source_path": "数字孪生与智能车间/基于数字孪生和强化学习的智能生产线实时调度仿真优化方法_机械工程学报2026.pdf",
+      "locator": "第 9 页",
+      "start": 9,
+      "end": 9,
+      "score": 0.015625,
+      "channels": "dense",
+      "dense_rank": 4,
+      "dense_score": 0.591556,
+      "sparse_rank": null,
+      "sparse_score": null,
+      "is_reference": false,
+      "text": "作中”的状态转换；其次，更新物料库存系统，对\n工具储存点 c 的对应工序 k 资源数量执行递减操作。\n最后，调整目标工位 g 的工序状态矩阵，记录当前\n加工进度。所有状态变更均通过事务性操作确保数\n据一致性。 \n完整的生产行为包含四个标准化阶段：① 导航\n移动阶段，智能体根据路径规划结果沿最优路径移\n动至工具储存点 c，移动过程中持续监测环境变化\n并动态调整路径； ② 工具获取阶段， 执行预设的抓\n取动作序列，通过碰撞检测算法验证抓取有效性，\n失败时触发重试机制； ③ 工位转移阶段， 沿规划路\n径移动至目标工位 g，期间保持工具稳定状态；④\n加工操作阶段，执行与工序 k 匹配的标准加工程序，\n通过物理引擎模拟实际加工效果。每个阶段结束后\n生成日志，用于后续分析与策略优化。 \n在完成智能生产线中关键要素智能体定义和感\n知器、决策器、执行器构建后，为了验证智能仿真\n方法的有效性，设计一组案例进行测试，用以验证\n使用 Q-learning 强化学习算法进行智能体决策器构\n建的有效性。 \n3  案例分析 \n3.1  场景描述 \n本研究以某航天产品总装生产线为工程背景，\n构建包含多要素协同的动态生产场景。",
+      "citation": "数字孪生与智能车间/基于数字孪生和强化学习的智能生产线实时调度仿真优化方法_机械工程学报2026.pdf:第 9 页",
+      "doc_type": "pdf"
+    },
+    {
+      "id": "NC代码生成与校验/GLLM-基于大模型自纠错的G代码生成_arXiv2025.pdf:5:b54334d8598fdeee",
+      "source_path": "NC代码生成与校验/GLLM-基于大模型自纠错的G代码生成_arXiv2025.pdf",
+      "locator": "第 5 页",
+      "start": 5,
+      "end": 5,
+      "score": 0.015385,
+      "channels": "dense",
+      "dense_rank": 5,
+      "dense_score": 0.573773,
+      "sparse_rank": null,
+      "sparse_score": null,
+      "is_reference": false,
+      "text": "eneration mechanisms to\neach subtask in isolation. This focused approach ensures accurate G-code generation for\neach individual geometric element. Following the generation of subtask-specific G-code\nsegments, GLLM performs a refinement and integration step. This crucial step combines\nthe individual code segments into a unified and executable G-code program. This final\nprogram accurately reflects the complete user-defined task, encompassing all specified\nshapes and their relationships. This decomposition and integration process significantly\nimproves GLLM’s ability to manage complex tasks and generate accurate G-code for\nintricate designs.nd generate accurate G-code for\nintricate designs.",
+      "citation": "NC代码生成与校验/GLLM-基于大模型自纠错的G代码生成_arXiv2025.pdf:第 5 页",
+      "doc_type": "pdf"
+    },
+    {
+      "id": "数字孪生与智能车间/基于数字孪生和强化学习的智能生产线实时调度仿真优化方法_机械工程学报2026.pdf:8:083d738c07981934",
+      "source_path": "数字孪生与智能车间/基于数字孪生和强化学习的智能生产线实时调度仿真优化方法_机械工程学报2026.pdf",
+      "locator": "第 8 页",
+      "start": 8,
+      "end": 8,
+      "score": 0.016393,
+      "channels": "dense",
+      "dense_rank": 1,
+      "dense_score": 0.629264,
+      "sparse_rank": null,
+      "sparse_score": null,
+      "is_reference": false,
+      "text": "应 Q 值的数据结构。\nQ 值是一种用来估计在给定状态下采取特定行动后\n可以获得的未来总回报的函数。Q-learning 的核心思\n想是通过不断地与环境交互，更新和优化 Q 表，从\n而学习到一个最优的策略，即在每个状态下选择 Q\n值最大的动作。Q 表的作用是记录和更新智能体对\n每个状态-动作对的价值评估， 指导智能体做出最优\n的决策，提高其长期的累计奖励。 \n对于本文的智能体决策，设计的 Q 表如式(7)\n所示。 \n [ ]g jk cQN N N N⎡⎤⎣⎦ ii     ( 7 )  \n即对于可能的动作{ },, ,j cgk ，对应的 Q 值为 \n [ ]jcQg N j k N c⎡⎤ ++⎣⎦ ii    ( 8 )  \nQ 表的初始值应当与加工和搬运工人 j 到生产\n材料和工具储存点  c 至生产场地和设备  g 的执行\n移动距离 ,,j cgdis 成反比，同时避免初始 Q 值过大，\n将执行移动距离转换为 ,, ,j cgkQ 。Q 值的初始化如式\n(9)所示。 \n []\n,,\n10 0005 100jc\njcg\nQg N j k N c dis\n⎡⎤ ++ = +⎣⎦ +ii   ( 9 )  \n之后不断更新 Q 表的值， 并再根据新的值来判\n断在某个状态应该采取怎样的动作。",
+      "citation": "数字孪生与智能车间/基于数字孪生和强化学习的智能生产线实时调度仿真优化方法_机械工程学报2026.pdf:第 8 页",
+      "doc_type": "pdf"
+    },
+    {
+      "id": "NC代码生成与校验/后置处理中平面轮廓拐角加工程序自动生成技术_图学学报2013.pdf:1:d0faa98deb66bc0d",
+      "source_path": "NC代码生成与校验/后置处理中平面轮廓拐角加工程序自动生成技术_图学学报2013.pdf",
+      "locator": "第 1 页",
+      "start": 1,
+      "end": 1,
+      "score": 0.016129,
+      "channels": "sparse",
+      "dense_rank": null,
+      "dense_score": null,
+      "sparse_rank": 2,
+      "sparse_score": 15.994196,
+      "is_reference": false,
+      "text": "动生成拐角加工数控程序算法，以满足产品升级与加工高要求之需，进一步确\n保数控加工安全与零件表面质量。为实现拐角识别，首先总结归纳常见数控代码结构；其次\n还原 NC代码的几何形态并采用线链表示，计算线链走向、线链边之切矢；将拐角分为点式\n拐角与圆弧式拐角两大类型，综合拐角的离散结构与线链的封闭性，给出了拐角的识别原理\n与相应准则。拐角加工按分层铣削加工，从刀具轴向上减少刀具在拐角位置处加工瞬时的切\n削量；各层拐角加工刀轨由进刀、切入、拐角加工、切出与退刀五段组成；层间刀轨采用进\n退刀连接线衔接。最后用实例验证了该算法的正确性。 \n关  键  词：数控加工；拐角加工；NC代码；后置处理 \n中图分类号：TP 391.7 \n文献标识码：A         文 章 编 号：2095-302X (2013)03-0058-07 \n \nAutomatic Generation of Corner Machining Program for Planar Profiles \nduring Post-processing \n \nRao Youfu1,  Zheng Guolei 1,  Chen Jun 1,  Du Baorui 2,  Chu Hongzhen 2 \n ( 1.",
+      "citation": "NC代码生成与校验/后置处理中平面轮廓拐角加工程序自动生成技术_图学学报2013.pdf:第 1 页",
+      "doc_type": "pdf"
+    }
+  ],
+  "retrieval": [
+    {
+      "round": 1,
+      "query": "NC 代码自动生成怎么保证正确性？",
+      "hits": 8,
+      "elapsed_s": 4.142
+    },
+    {
+      "round": 2,
+      "query": "NC代码 正确性 校验 方法",
+      "hits": 8,
+      "elapsed_s": 0.012
+    },
+    {
+      "round": 3,
+      "query": "后置处理 NC代码 仿真 验证",
+      "hits": 8,
+      "elapsed_s": 0.01
+    },
+    {
+      "round": 4,
+      "query": "自动编程 G代码 自纠错 验证",
+      "hits": 8,
+      "elapsed_s": 0.009
+    }
+  ],
+  "calls": [
+    {
+      "stage": "plan",
+      "prompt_tokens": 3512,
+      "cached_tokens": 0,
+      "completion_tokens": 775,
+      "finish_reason": "stop",
+      "elapsed_s": 7.51,
+      "cost": {
+        "usd": 0.0019836,
+        "cny": 0.014083559999999998
+      }
+    },
+    {
+      "stage": "answer",
+      "prompt_tokens": 4674,
+      "cached_tokens": 512,
+      "completion_tokens": 3624,
+      "finish_reason": "stop",
+      "elapsed_s": 20.072,
+      "cost": {
+        "usd": 0.005600472,
+        "cny": 0.0397633512
+      }
+    }
+  ],
+  "tokens": {
+    "prompt": 8186,
+    "cached": 512,
+    "completion": 4399
+  },
+  "cost": {
+    "peak": true,
+    "usd": 0.007584071999999999,
+    "cny": 0.0538469112
+  },
+  "elapsed": {
+    "total_s": 31.76,
+    "retrieval_s": 4.17,
+    "model_s": 27.58
+  },
+  "generated_at": "2026-10-26T14:26:30+08:00",
+  "top_k": 8,
+  "thinking_model": null
+}

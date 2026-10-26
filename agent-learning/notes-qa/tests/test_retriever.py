@@ -573,3 +573,110 @@ def test_subtopics_counts_chunks_and_marks_root_files():
     )
 
     assert retriever.subtopics() == {"刀具磨损监测": 2, "（根目录）": 1}
+
+
+# ---- 子主题先验的回落策略（2026-10-25）----
+
+
+def _two_subtopic_retriever():
+    """两个子主题各一篇：用来验"先紧、不够再放宽"。"""
+    parts = []
+    for index in range(4):
+        parts.append(f"刀具磨损监测/监测{index}.md")
+        parts.append(f"切削参数优化/参数{index}.md")
+    from rag.chunk import Chunk
+
+    chunks = [
+        Chunk.create(
+            source_path=path,
+            doc_type="md",
+            locator="第 1 页",
+            start=1,
+            end=1,
+            text="刀具 磨损 监测 切削 参数",
+        )
+        for path in parts
+    ]
+    vectors = np.zeros((len(chunks), 4), dtype=np.float32)
+    return Retriever(chunks, vectors, None, tokenizer=str.split)
+
+
+def test_search_scoped_keeps_the_tight_scope_when_enough_hits():
+    """子主题内够数 → 用紧口径，并标 `scoped: true`。"""
+    retriever = _two_subtopic_retriever()
+
+    hits, meta = R.search_scoped(retriever, "刀具 磨损", 4, subtopic="刀具磨损监测")
+
+    assert meta["scoped"] is True
+    assert meta["fallback_reason"] is None
+    assert hits and all(
+        hit.chunk.source_path.startswith("刀具磨损监测/") for hit in hits
+    )
+
+
+def test_search_scoped_falls_back_and_says_why():
+    """子主题内不够数 → 回落全局，**并且必须说清为什么**（否则调用方分不清口径）。"""
+    retriever = _two_subtopic_retriever()
+
+    hits, meta = R.search_scoped(
+        retriever, "刀具 磨损", 4, subtopic="刀具磨损监测", min_keep=99
+    )
+
+    assert meta["scoped"] is False
+    assert "少于 99 条" in (meta["fallback_reason"] or "")
+    assert len(hits) == 4, "回落之后应当拿到全局的 top_k"
+
+
+def test_search_scoped_without_subtopic_is_plain_search():
+    """没给子主题就等价于普通检索（不标注、不回落）。"""
+    retriever = _two_subtopic_retriever()
+
+    hits, meta = R.search_scoped(retriever, "刀具", 3)
+
+    assert meta["scoped"] is False and meta["fallback_reason"] is None
+    assert len(hits) == 3
+
+
+# ---- 加权口径（2026-10-26）----
+
+
+def test_search_boosted_lifts_the_subtopic_without_dropping_others():
+    """加权：同子主题的分数被乘上去，但**别的方向不会被拍掉**（与过滤的区别就在这里）。"""
+
+    def hit(path: str, score: float):
+        return R.SearchHit(
+            chunk=make_chunk(path, "刀具"), score=score, dense_rank=1, sparse_rank=1
+        )
+
+    class StubRetriever:
+        """桩检索器：直接回预设命中、**分数可控**。
+
+        为什么不用迷你索引：那里向量全零、分数都是 0，乘任何系数还是 0——
+        测不出"加权有没有生效"。第一版就是这么写的，它挂了，原因不是代码错，是**测试选错了数据**。
+        """
+
+        def search(self, query, top_k=5, **kwargs):
+            # 切削那条原始分更高；加权 2.0 后刀具那条应当反超
+            return [hit("切削参数优化/a.md", 0.04), hit("刀具磨损监测/b.md", 0.03)]
+
+    hits, meta = R.search_boosted(
+        StubRetriever(), "刀具 磨损", 4, subtopic="刀具磨损监测", factor=2.0
+    )
+
+    assert meta["boosted"] is True and meta["factor"] == 2.0
+    assert hits[0].chunk.source_path.startswith("刀具磨损监测/"), (
+        "加权后同子主题应当反超"
+    )
+    assert any(hit.chunk.source_path.startswith("切削参数优化/") for hit in hits), (
+        "加权不排除别的方向"
+    )
+
+
+def test_search_boosted_without_subtopic_is_plain_search():
+    """没给子主题时等价普通检索，并标 `boosted: false`。"""
+    retriever = _two_subtopic_retriever()
+
+    hits, meta = R.search_boosted(retriever, "刀具", 3)
+
+    assert meta["boosted"] is False and meta["factor"] is None
+    assert len(hits) == 3
