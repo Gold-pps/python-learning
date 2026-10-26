@@ -19,6 +19,8 @@ import asyncio
 import json
 import subprocess
 import sys
+import threading
+import time
 from pathlib import Path
 
 import numpy as np
@@ -438,76 +440,6 @@ def test_allow_spend_flag_opens_the_gate(monkeypatch, capsys, tmp_path):
     assert json.loads(capsys.readouterr().out)["spend"]["allowed"] is True
 
 
-def test_stdio_handshake_lists_the_three_tools():
-    """真起一个子进程走 stdio：`initialize` → `tools/list`。
-
-    前面几条测的是"工具函数对不对"，这条测的是"**MCP 客户端能不能跟它说上话**"——
-    入口、`__main__`、协议握手这些东西只有真起进程才验得到（`--check` 也不行，
-    它在 `server.run()` 之前就 return 了）。
-    """
-    notes_qa = Path(__file__).resolve().parents[1]
-    requests = [
-        {
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": "initialize",
-            "params": {
-                "protocolVersion": "2024-11-05",
-                "capabilities": {},
-                "clientInfo": {"name": "pytest", "version": "0"},
-            },
-        },
-        {"jsonrpc": "2.0", "method": "notifications/initialized"},
-        {"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}},
-    ]
-
-    def handshake() -> tuple[dict, str]:
-        """起一次子进程做握手，返回 `(按 id 索引的回复, stderr)`。"""
-        proc = subprocess.run(
-            [sys.executable, "-X", "utf8", "-m", "mcp_server"],
-            cwd=notes_qa,
-            input="".join(
-                json.dumps(item, ensure_ascii=False) + "\n" for item in requests
-            ),
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=90,
-            check=False,
-        )
-        found: dict = {}
-        for line in proc.stdout.splitlines():
-            try:
-                message = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            if "id" in message:
-                found[message["id"]] = message
-        return found, proc.stderr
-
-    # 允许重试一次——**这不是逻辑测试**：它起子进程做协议握手，CI 负载高时会抖
-    # （本地全量跑偶发红过两次，单跑 3/3 稳过，见台账 T55）。
-    # 关键是"重试只救抖动，不救命"：逻辑断言两遍都跑，真坏了两次都会红；
-    # 而且断言改成**看回复**而不是看进程返回值——返回值 0 只说明"它退出了"。
-    replies: dict = {}
-    stderr = ""
-    for _attempt in range(2):
-        replies, stderr = handshake()
-        if "result" in replies.get(1, {}) and 2 in replies:
-            break
-
-    assert "result" in replies.get(1, {}), (
-        f"initialize 没回成功（两次）：{stderr[-500:]}"
-    )
-    assert 2 in replies, f"tools/list 没回（两次）：{stderr[-500:]}"
-    tools = {tool["name"]: tool for tool in replies[2]["result"]["tools"]}
-    assert set(tools) == {"search_corpus", "read_chunk", "review_question"}
-    # 注解在**协议线上是驼峰**（Python 侧是蛇形）——客户端看到的是这个
-    assert tools["search_corpus"]["annotations"]["readOnlyHint"] is True
-    assert tools["review_question"]["annotations"]["openWorldHint"] is True
-
-
 def test_review_question_stops_at_the_call_limit(monkeypatch):
     """开了闸门也要有上限：调用方是 Agent，它会在一次任务里反复问。"""
     monkeypatch.setenv(mcp.SPEND_ENV, "1")
@@ -524,3 +456,76 @@ def test_review_question_stops_at_the_call_limit(monkeypatch):
 
     assert "用完" in second["error"]
     assert second["spend"]["used"] == 1, "被拦下的调用不该计数"
+
+
+def test_stdio_handshake_lists_the_three_tools():
+    """真起一个子进程走 stdio：`initialize` → `notifications/initialized` → `tools/list`。
+
+    前面几条测的是"工具函数对不对"，这条测的是"**MCP 客户端能不能跟它说上话**"——
+    入口、`__main__`、协议握手这些东西只有真起进程才验得到（`--check` 也不行，
+    它在 `server.run()` 之前就 return 了）。
+
+    **必须按协议顺序逐条发**（台账 T59）：先 `initialize` 拿到 `result`，再发
+    `notifications/initialized`，最后才 `tools/list`。旧写法把三条消息一口气写进 stdin
+    然后立刻关闭，CI 上**稳定**只回 `initialize`（`replies` 里只有一个 `id=1`）——
+    那不是服务端的问题，是测试没按握手机制来。
+    """
+    notes_qa = Path(__file__).resolve().parents[1]
+
+    init = {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "initialize",
+        "params": {
+            "protocolVersion": "2024-11-05",
+            "capabilities": {},
+            "clientInfo": {"name": "pytest", "version": "0"},
+        },
+    }
+    initialized = {"jsonrpc": "2.0", "method": "notifications/initialized"}
+    tools_list = {"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}}
+
+    proc = subprocess.Popen(
+        [sys.executable, "-X", "utf8", "-m", "mcp_server"],
+        cwd=notes_qa,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        bufsize=1,
+    )
+    # 看门狗：读不到回复时杀掉子进程，别让 CI 挂到超时（readline 没有超时参数）
+    watchdog = threading.Timer(60, proc.kill)
+    watchdog.start()
+    replies: dict = {}
+    try:
+        for message in (init, initialized, tools_list):
+            proc.stdin.write(json.dumps(message, ensure_ascii=False) + "\n")
+            proc.stdin.flush()
+            if "id" not in message:
+                continue  # 通知没有回复，直接下一条
+            deadline = time.monotonic() + 30
+            while time.monotonic() < deadline and message["id"] not in replies:
+                line = proc.stdout.readline()
+                if not line:
+                    break
+                try:
+                    parsed = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if "id" in parsed:
+                    replies[parsed["id"]] = parsed
+    finally:
+        watchdog.cancel()
+        proc.kill()
+        stderr = proc.communicate(timeout=30)[1] or ""
+
+    assert "result" in replies.get(1, {}), f"initialize 没回成功：{stderr[-500:]}"
+    assert 2 in replies, f"tools/list 没回：{stderr[-500:]}"
+    tools = {tool["name"]: tool for tool in replies[2]["result"]["tools"]}
+    assert set(tools) == {"search_corpus", "read_chunk", "review_question"}
+    # 注解在**协议线上是驼峰**（Python 侧是蛇形）——客户端看到的是这个
+    assert tools["search_corpus"]["annotations"]["readOnlyHint"] is True
+    assert tools["review_question"]["annotations"]["openWorldHint"] is True

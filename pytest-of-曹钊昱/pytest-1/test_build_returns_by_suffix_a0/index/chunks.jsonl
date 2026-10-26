@@ -1,0 +1,2 @@
+{"id": "a.md:2:7d5ed016ce06add9", "source_path": "a.md", "doc_type": "md", "locator": "T", "start": 2, "end": 2, "text": "有效内容。", "hash": "7d5ed016ce06add9", "is_reference": false}
+{"id": "b.txt:1:baf6d2dc5c153582", "source_path": "b.txt", "doc_type": "txt", "locator": "行 1-1", "start": 1, "end": 1, "text": "纯文本内容。", "hash": "baf6d2dc5c153582", "is_reference": false}

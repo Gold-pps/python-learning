@@ -1,0 +1,139 @@
+{
+  "question": "刀具磨损监测有哪些主流方法？",
+  "retrieval_query": "刀具磨损监测有哪些主流方法？",
+  "carried_from": null,
+  "sections": {
+    "研究现状": [
+      {
+        "point": "有两种主流做法",
+        "citations": [
+          {
+            "text": "刀具/A.pdf:第 2 页",
+            "kind": "exact",
+            "hit_index": 0
+          },
+          {
+            "text": "刀具/B.pdf",
+            "kind": "partial",
+            "hit_index": null,
+            "file_hits": [
+              1
+            ]
+          }
+        ]
+      }
+    ],
+    "方法对比": [
+      {
+        "point": "方法A",
+        "pros": "便宜",
+        "cons": "精度差",
+        "citations": []
+      }
+    ],
+    "结论": [],
+    "可复用点": []
+  },
+  "insufficient": true,
+  "note": "资料中没有直接答案，以下是相邻证据。",
+  "degraded": false,
+  "reason": "四段式回答已产出；引用：精确 1、缺定位 1、编造 1；无引用条目 1",
+  "plan_reason": "候选已足够",
+  "thinking_recommended": true,
+  "citations": {
+    "exact": 1,
+    "partial": 1,
+    "invalid": [
+      "幽灵.pdf:第 9 页"
+    ],
+    "uncited": 1
+  },
+  "candidates": [
+    {
+      "id": "刀具/A.pdf:2:79e9a0ed947924dc",
+      "source_path": "刀具/A.pdf",
+      "locator": "第 2 页",
+      "start": 2,
+      "end": 2,
+      "score": 0.03,
+      "channels": "dense+sparse",
+      "dense_rank": 1,
+      "dense_score": null,
+      "sparse_rank": 1,
+      "sparse_score": null,
+      "is_reference": false,
+      "text": "这是候选片段的原文全文，点开引用要能看到它。",
+      "citation": "刀具/A.pdf:第 2 页",
+      "doc_type": "pdf"
+    },
+    {
+      "id": "刀具/B.pdf:5:2984a9b5a48228a9",
+      "source_path": "刀具/B.pdf",
+      "locator": "第 5 页",
+      "start": 5,
+      "end": 5,
+      "score": 0.03,
+      "channels": "dense+sparse",
+      "dense_rank": 1,
+      "dense_score": null,
+      "sparse_rank": 1,
+      "sparse_score": null,
+      "is_reference": false,
+      "text": "B 的原文。",
+      "citation": "刀具/B.pdf:第 5 页",
+      "doc_type": "pdf"
+    }
+  ],
+  "retrieval": [
+    {
+      "round": 1,
+      "query": "刀具磨损监测有哪些主流方法？",
+      "hits": 2,
+      "elapsed_s": 0.05
+    }
+  ],
+  "calls": [
+    {
+      "stage": "plan",
+      "prompt_tokens": 1000,
+      "cached_tokens": 400,
+      "completion_tokens": 200,
+      "finish_reason": "stop",
+      "elapsed_s": 10.0,
+      "cost": {
+        "usd": 0.0014,
+        "cny": 0.0099
+      }
+    },
+    {
+      "stage": "answer",
+      "prompt_tokens": 1000,
+      "cached_tokens": 400,
+      "completion_tokens": 200,
+      "finish_reason": "stop",
+      "elapsed_s": 10.0,
+      "cost": {
+        "usd": 0.0014,
+        "cny": 0.0099
+      }
+    }
+  ],
+  "tokens": {
+    "prompt": 2000,
+    "cached": 800,
+    "completion": 400
+  },
+  "cost": {
+    "peak": false,
+    "usd": 0.0027,
+    "cny": 0.019
+  },
+  "elapsed": {
+    "total_s": 20.0,
+    "retrieval_s": 0.05,
+    "model_s": 20.0
+  },
+  "generated_at": "2026-01-01T00:00:00+08:00",
+  "top_k": 8,
+  "thinking_model": null
+}
