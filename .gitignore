@@ -41,3 +41,10 @@ agent-learning/notes-qa/data/
 # `_tmp_search_corpus.py` 在仓库里，自己标着"用完即删"却没删）
 tmp_*.py
 _tmp_*.py
+
+# pytest 的临时目录：Windows 上 `tmp_path` 有时会落在**仓库根目录**（`pytest-of-<用户名>/pytest-N/`），
+# 里面的东西每次重跑都变，进了 Git 等于把垃圾当资产（2026-10-26 首次发现）
+pytest-of-*/
+# 固定给 pytest / 临时文件用的仓库内目录（pyproject 里 `--basetemp` 指的就是它）
+.pytest-tmp/
+.tmp/

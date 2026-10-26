@@ -1,8 +1,0 @@
-{
-  "model": "fake",
-  "dim": 8,
-  "n_chunks": 1,
-  "n_files": 2,
-  "n_failures": 1,
-  "built_at": "2026-10-26T18:19:20"
-}

@@ -33,3 +33,7 @@ dev = [
 [tool.pytest.ini_options]
 testpaths = ["agent-learning/notes-qa/tests"]
 pythonpath = ["agent-learning/notes-qa"]
+# 本机的安全策略只允许 python 在**当前目录**里写（`%TEMP%` 不可写，`tempfile.gettempdir()`
+# 会退化到仓库根目录 —— 台账 T60）。`--basetemp` 把 pytest 的临时目录固定到仓库内的
+# `.pytest-tmp/`（已 gitignore），这样即使系统 TEMP 不可用，测试也不会往仓库根目录扔垃圾。
+addopts = "--basetemp=.pytest-tmp"
