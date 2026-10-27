@@ -80,7 +80,9 @@ def points_from_view(view: dict) -> list[tuple[str, str]]:
     return rows
 
 
-def build_report(headings: list[str], rows: list[tuple[str, str]], *, source: str, asked: str) -> str:
+def build_report(
+    headings: list[str], rows: list[tuple[str, str]], *, source: str, asked: str
+) -> str:
     """并排报告：左列是"综述说该讲什么"，右列是"系统讲了什么"，中间留白给人填。"""
     lines = [
         "# 对照评测：已发表综述 vs 系统产出",
@@ -93,11 +95,16 @@ def build_report(headings: list[str], rows: list[tuple[str, str]], *, source: st
         "",
     ]
     if headings:
-        lines += ["| # | 综述章节 | 系统覆盖了吗？ | 对应系统结论 |", "| - | -------- | -------------- | ------------ |"]
+        lines += [
+            "| # | 综述章节 | 系统覆盖了吗？ | 对应系统结论 |",
+            "| - | -------- | -------------- | ------------ |",
+        ]
         for index, heading in enumerate(headings, start=1):
             lines.append(f"| {index} | {heading} | ☐ 覆盖　☐ 部分　☐ 漏 |  |")
     else:
-        lines.append("（没能从 PDF 里抽出章节标题——请手工看目录，或换一份文字层清晰的版本）")
+        lines.append(
+            "（没能从 PDF 里抽出章节标题——请手工看目录，或换一份文字层清晰的版本）"
+        )
 
     lines += [
         "",
@@ -127,7 +134,9 @@ def build_report(headings: list[str], rows: list[tuple[str, str]], *, source: st
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="对照评测：已发表综述 vs 系统产出（离线）")
+    parser = argparse.ArgumentParser(
+        description="对照评测：已发表综述 vs 系统产出（离线）"
+    )
     parser.add_argument("--pdf", required=True, help="综述论文的 PDF 路径")
     parser.add_argument("--view", required=True, help="系统产出：综述包-0N-*.json")
     parser.add_argument("--out", default="", help="报告写到哪（默认打印到 stdout）")

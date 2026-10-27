@@ -104,6 +104,13 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
+    # Windows 控制台是 GBK：`✓`/`✗` 直接 print 会 UnicodeEncodeError（台账 T23），
+    # 而且**会把失败路径本身崩掉**（2026-10-27 实测：建库失败时本该提示"停在这一步"，
+    # 结果先被编码错误打断）。与其它 CLI 一致，用仓库里的兜底。
+    from rag.retriever import make_stdout_forgiving
+
+    make_stdout_forgiving()
+
     from rag import index as index_mod
 
     # ---- 1. 预检：失败就停，绝不把坏文件放进索引 ----
