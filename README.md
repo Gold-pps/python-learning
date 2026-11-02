@@ -17,12 +17,14 @@
   一条命令可复现当前累计（含**如实计入的编造条数**——37 次问答里出现过 1 条）：`uv run python -m web.usage --summary`；
   > 这里**刻意不写"累计 N 条"**——那类总数的口径随语料与使用一直在变，写死就会过期（台账 T56）。
   > 要数字就现场算：引用数在 `data/usage.jsonl` 里，或直接看界面每次回答的"耗时与成本"行。
-- **成本**：一次问答 2~7 分钱（最多 2 次模型调用）；历史累计**约 0.7 元 / 37 次问答**（截至 2026-10-20；注：使用日志目前**没记 `cost` 字段**，所以这个数还是手记的，下一步要把它补进日志——见 `第四阶段学习规划.md` H1）；
-- **评估与工程化**：`pytest` **298 passed, 1 skipped**（含一层不依赖浏览器的 DOM 冒烟）+
+- **成本**：一次问答 2~7 分钱（最多 2 次模型调用）；新记录**已带 `cost` 字段**，花费不用手记，跑
+  `uv run python -m web.usage --summary` 现算（2026-10-20 之前的 37 条历史记录没有该字段，未计入——这是实话，不是 bug）；
+- **评估与工程化**：`pytest` **314 passed, 1 skipped**（含一层不依赖浏览器的 DOM 冒烟）+
   模型评估 10 条；`pyproject.toml` + `uv.lock` + GitHub Actions（push 自动跑 `ruff` 与 `pytest`，
-  不联网、不用密钥）；技术债台账 `工程化改造记录.md` **T1~T57**，每条都是"现象 → 根因 → 改法 → 验证"；
-- **可被别的程序调用**：`notes-qa/mcp_server/`（MCP 协议，三个工具），已在本机 Codex 会话里**真接通**——
-  只读的检索与读原文免费，会花钱的综述问答默认关闭、单进程上限 5 次。
+  不联网、不用密钥）；技术债台账 `工程化改造记录.md` **T1~T60**，每条都是"现象 → 根因 → 改法 → 验证"；
+- **可被别的程序调用**：`notes-qa/mcp_server/`（MCP 协议，三个工具），已接进 **Codex** 与 **DSH**
+  （DeepSeek Harness）两个客户端，工具名形如 `mcp__notes_qa__search_corpus`——
+  只读的检索与读原文不产生费用，会花钱的综述问答默认关闭、单进程上限 5 次。
 
 ## 怎么跑起来（手动三步，**刻意不做开机自启**）
 
@@ -88,11 +90,12 @@ python-learning/
 │       ├── config.py / tools.py / agent.py / main.py   命令行问答（DeepSeek + Agents SDK）
 │       ├── eval_cases.py / exp_history_tokens.py / smoke_test.py  评估 / T3 实验 / 环境自检
 │       ├── constants.py          无依赖共享常量（断开 rag 与 agents 的依赖链）
-│       ├── rag/                  RAG：解析 / 切分 / 向量化 / 索引 / 混合检索 / 重排 / 综述问答
-│       ├── eval/                 抽查集 / 离线对比 / 建库报告 / 第 23 周 Web 验证
-│       ├── web/                  Web 界面（FastAPI + SSE + 单页前端）+ 使用说明（第 23 周）
+│       ├── rag/                  RAG：解析 / 切分 / 向量化 / 索引 / 混合检索 / 重排 / 综述问答 / 补资料与备份
+│       ├── eval/                 抽查集 / 离线对比 / 建库报告 / 核对清单 / 综述包 / 外部对照
+│       ├── web/                  Web 界面（FastAPI + SSE + 单页前端）/ 核对清单 / 使用统计 / 导出
+│       ├── mcp_server/           MCP server：三个工具 + 成本闸门（已接 Codex / DSH）
 │       ├── data/                 语料与索引（不进 Git）
-│       └── tests/                pytest 用例 + conftest.py + 前端冒烟
+│       └── tests/                pytest 用例（314 passed）+ conftest.py + 前端冒烟
 └── .venv/                        Python 虚拟环境（不提交）
 ```
 
@@ -104,7 +107,7 @@ python-learning/
 
 ### 1. 准备环境
 
-要求 **Python ≥3.12**（本项目实际使用 3.13.14）。
+要求 **Python ≥3.12**（本项目 `.venv` 实际是 3.12.14）。
 
 ```bash
 uv sync                # 按 uv.lock 安装到 .venv（含 dev 组 pytest / ruff）
@@ -147,7 +150,7 @@ uv run python eval_cases.py --unit-only
 ### 4. 跑测试与检查（仓库根）
 
 ```bash
-uv run pytest -q      # 46 passed
+uv run pytest -q      # 314 passed, 1 skipped
 uv run ruff check .   # All checks passed
 ```
 
@@ -222,7 +225,7 @@ cd agent-learning/notes-qa
 
 | 类型             | 条数    | 覆盖                                                             |
 | ---------------- | ------- | ---------------------------------------------------------------- |
-| 离线测试（pytest） | **220** | 解析 / 切分 / 检索 / 引用校验 / Web 接口 / 前端 DOM 冒烟（+1 skip） |
+| 离线测试（pytest） | **314** | 解析 / 切分 / 检索 / 引用校验 / Web 接口 / MCP 协议 / 前端 DOM 冒烟（+1 skip） |
 | 模型评估         | 10      | 四类：有答案 4 / 无答案 2 / 跨文档 2 / 需要多跳 2                |
 | 检索评测集       | 25      | 四类各 5 条，Top-5 严格判据，跑四组方法对比                      |
 | 真实使用         | 26 次（2026-10-19 口径） | 浏览器界面；引用 **0 编造**（逐条对账、每个都可点开回查），人工抽查 9/9 逐字一致 |
@@ -252,7 +255,7 @@ cd agent-learning/notes-qa
 
 ## 技术栈
 
-- Python ≥3.12（实际 3.13.14）
+- Python ≥3.12（`.venv` 实际 3.12.14）
 - [uv](https://docs.astral.sh/uv/)
 - [OpenAI Agents SDK](https://openai.github.io/openai-agents-python/)
 - [DeepSeek API](https://api-docs.deepseek.com/)
